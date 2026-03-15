@@ -592,6 +592,21 @@ body {
   margin-bottom: 20px;
 }
 
+.radio-row {
+  display: flex;
+  gap: 16px;
+}
+.radio-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.938rem;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 500;
+}
+.radio-opt input[type="radio"] { accent-color: var(--navy); width: 16px; height: 16px; cursor: pointer; }
+
 .field-hint {
   font-size: 0.75rem;
   color: var(--text-muted);

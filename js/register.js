@@ -15,14 +15,41 @@ const Register = (() => {
   // ========== Étape 1 : choix du rôle ==========
   function setupRoleCards() {
     document.querySelectorAll('.role-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', async () => {
         selectedRole = card.dataset.role;
-        document.getElementById('field-child').hidden = selectedRole !== 'parent';
+
+        // Afficher/cacher les champs selon le rôle
+        document.getElementById('fields-eleve').hidden = selectedRole !== 'eleve';
+        document.getElementById('field-child').hidden  = selectedRole !== 'parent';
+
         document.getElementById('reg-role-label').textContent =
           selectedRole === 'eleve' ? '👩‍🎓 Inscription élève' : '👨‍👧 Inscription parent';
+
+        // Charger la liste des profs pour les élèves
+        if (selectedRole === 'eleve') {
+          await loadProfs();
+        }
+
         showStep('form');
       });
     });
+  }
+
+  async function loadProfs() {
+    const select = document.getElementById('reg-prof');
+    select.innerHTML = '<option value="">Chargement…</option>';
+
+    try {
+      const { data, error } = await supabase.rpc('get_profs');
+      if (error || !data || data.length === 0) {
+        select.innerHTML = '<option value="">Aucun prof disponible</option>';
+        return;
+      }
+      select.innerHTML = '<option value="">Choisissez votre prof…</option>' +
+        data.map(p => `<option value="${p.id}">${p.full_name}</option>`).join('');
+    } catch {
+      select.innerHTML = '<option value="">Erreur de chargement</option>';
+    }
   }
 
   function setupBackBtn() {
@@ -40,7 +67,7 @@ const Register = (() => {
   // ========== Toggle mot de passe ==========
   function setupPasswordToggle() {
     const input = document.getElementById('reg-password');
-    const btn = document.getElementById('toggle-reg-password');
+    const btn   = document.getElementById('toggle-reg-password');
     if (!btn || !input) return;
     btn.addEventListener('click', () => {
       const show = input.type === 'password';
@@ -67,22 +94,24 @@ const Register = (() => {
 
     const name       = document.getElementById('reg-name').value.trim();
     const email      = document.getElementById('reg-email').value.trim().toLowerCase();
-    const childEmail = document.getElementById('reg-child-email').value.trim().toLowerCase();
     const password   = document.getElementById('reg-password').value;
     const confirm    = document.getElementById('reg-confirm').value;
+    const childEmail = document.getElementById('reg-child-email').value.trim().toLowerCase();
+    const level      = document.querySelector('input[name="level"]:checked')?.value || null;
+    const teacherId  = document.getElementById('reg-prof')?.value || null;
 
     // Validation
-    if (!name) { showError('Veuillez entrer votre nom complet.'); return; }
-    if (password !== confirm) { showError('Les mots de passe ne correspondent pas.'); return; }
-    if (password.length < 6) { showError('Le mot de passe doit faire au moins 6 caractères.'); return; }
-    if (selectedRole === 'parent' && !childEmail) {
-      showError("Veuillez entrer l'email de votre enfant."); return;
-    }
+    if (!name)                          { showError('Veuillez entrer votre nom complet.'); return; }
+    if (password !== confirm)           { showError('Les mots de passe ne correspondent pas.'); return; }
+    if (password.length < 6)            { showError('Le mot de passe doit faire au moins 6 caractères.'); return; }
+    if (selectedRole === 'eleve' && !level)     { showError('Veuillez choisir votre niveau.'); return; }
+    if (selectedRole === 'eleve' && !teacherId) { showError('Veuillez choisir votre professeur.'); return; }
+    if (selectedRole === 'parent' && !childEmail) { showError("Veuillez entrer l'email de votre enfant."); return; }
 
     setLoading(true);
 
     try {
-      // Création du compte
+      // Création du compte Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -95,19 +124,21 @@ const Register = (() => {
         }
       });
 
-      if (error) {
-        showError(getSignupError(error));
-        setLoading(false);
-        return;
-      }
+      if (error) { showError(getSignupError(error)); setLoading(false); return; }
 
-      // Si session dispo (confirmation email désactivée) → lier immédiatement
+      // Si session active (confirmation email désactivée) → actions immédiates
       if (data.session) {
-        await tryLink(selectedRole, childEmail);
+        if (selectedRole === 'eleve') {
+          await supabase.rpc('register_student', {
+            p_level: level,
+            p_teacher_id: teacherId,
+          }).catch(() => {});
+        } else if (selectedRole === 'parent' && childEmail) {
+          await supabase.rpc('link_parent_to_child', { p_child_email: childEmail }).catch(() => {});
+        }
       }
-      // Sinon le lien se fera au premier login via auth.js
+      // Sinon : le lien se fait au premier login via auth.js
 
-      // Message succès
       const msg = data.session
         ? 'Votre compte est actif. Vous pouvez vous connecter.'
         : 'Vérifiez votre boîte mail pour confirmer votre adresse, puis connectez-vous.';
@@ -116,28 +147,16 @@ const Register = (() => {
       setLoading(false);
       showStep('success');
 
-    } catch (err) {
+    } catch {
       showError('Erreur réseau. Vérifiez votre connexion.');
       setLoading(false);
-    }
-  }
-
-  async function tryLink(role, childEmail) {
-    try {
-      if (role === 'eleve') {
-        await supabase.rpc('link_student_profile');
-      } else if (role === 'parent' && childEmail) {
-        await supabase.rpc('link_parent_to_child', { p_child_email: childEmail });
-      }
-    } catch (e) {
-      // Non bloquant — le prof peut lier manuellement
     }
   }
 
   // ========== Helpers ==========
   function getSignupError(error) {
     const msg = error?.message?.toLowerCase() || '';
-    if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('email')) {
+    if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
       return 'Un compte existe déjà avec cet email.';
     }
     if (msg.includes('password')) {

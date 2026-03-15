@@ -57,11 +57,35 @@
               <input type="email" id="reg-email" name="email" required autocomplete="email" placeholder="votre@email.com" />
             </div>
 
-            <!-- Champ visible uniquement pour les parents -->
+            <!-- Champs élève uniquement -->
+            <div id="fields-eleve" hidden>
+              <div class="form-group">
+                <label>Niveau</label>
+                <div class="radio-row">
+                  <label class="radio-opt">
+                    <input type="radio" name="level" value="secondaire" />
+                    Secondaire
+                  </label>
+                  <label class="radio-opt">
+                    <input type="radio" name="level" value="superieur" />
+                    Supérieur
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="reg-prof">Mon professeur BCW</label>
+                <select id="reg-prof" name="prof">
+                  <option value="">Chargement…</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Champ parent uniquement -->
             <div class="form-group" id="field-child" hidden>
               <label for="reg-child-email">Email de votre enfant</label>
               <input type="email" id="reg-child-email" name="child_email" autocomplete="off" placeholder="email.enfant@exemple.com" />
-              <p class="field-hint">Doit correspondre à l'email enregistré par le prof.</p>
+              <p class="field-hint">L'email utilisé par votre enfant pour son compte BCW.</p>
             </div>
 
             <div class="form-group">
