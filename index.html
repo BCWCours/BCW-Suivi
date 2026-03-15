@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BCW Suivi</title>
+  <meta name="description" content="Plateforme de suivi pédagogique BCWcours" />
+  <meta name="theme-color" content="#09529A" />
+  <link rel="icon" href="assets/favicon.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ========== LOGIN ========== -->
+  <div id="view-login" class="view active">
+    <div class="login-container">
+      <div class="login-brand">
+        <div class="login-logo">BCW</div>
+        <h1>BCW Suivi</h1>
+        <p class="login-tagline">Plateforme de suivi pédagogique</p>
+      </div>
+      <form id="login-form" class="login-form" autocomplete="on">
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" name="email" required autocomplete="email" placeholder="votre@email.com" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Mot de passe</label>
+          <input type="password" id="login-password" name="password" required autocomplete="current-password" placeholder="Mot de passe" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="login-btn">Se connecter</button>
+        <p id="login-error" class="form-error" hidden></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== APP SHELL ========== -->
+  <div id="app-shell" class="app-shell" hidden>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">BCW Suivi</div>
+        <div class="topbar-user">
+          <span id="topbar-name"></span>
+          <button id="btn-logout" class="btn btn-sm btn-outline" type="button">Déconnexion</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+
+      <!-- PROF: Liste élèves -->
+      <div id="view-prof-dashboard" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2>Mes élèves</h2>
+          </div>
+          <div id="prof-students-list" class="students-grid"></div>
+        </div>
+      </div>
+
+      <!-- PROF: Rédiger rapport -->
+      <div id="view-report-editor" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <button id="btn-back-dashboard" class="btn btn-sm btn-outline" type="button">← Retour</button>
+            <h2>Rédiger un rapport</h2>
+          </div>
+          <form id="report-form" class="report-form">
+            <div class="report-student-info" id="report-student-info"></div>
+
+            <div class="form-group">
+              <label for="report-date">Date de la séance</label>
+              <input type="date" id="report-date" required />
+            </div>
+
+            <div class="form-group">
+              <label for="report-subjects">Matières abordées</label>
+              <input type="text" id="report-subjects" required placeholder="Ex: Algèbre, fonctions du 2nd degré" />
+            </div>
+
+            <div class="form-group">
+              <label for="report-strengths">Points forts</label>
+              <textarea id="report-strengths" rows="3" required placeholder="Ce que l'élève a bien fait..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="report-improvements">À travailler</label>
+              <textarea id="report-improvements" rows="3" required placeholder="Ce qu'il faut renforcer..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="report-resources">Ressources (optionnel)</label>
+              <textarea id="report-resources" rows="2" placeholder="Liens, documents, exercices recommandés..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="report-score">Appréciation (1 à 5)</label>
+              <div class="score-selector" id="score-selector">
+                <button type="button" class="score-btn" data-score="1">1</button>
+                <button type="button" class="score-btn" data-score="2">2</button>
+                <button type="button" class="score-btn" data-score="3">3</button>
+                <button type="button" class="score-btn" data-score="4">4</button>
+                <button type="button" class="score-btn" data-score="5">5</button>
+              </div>
+              <input type="hidden" id="report-score" />
+            </div>
+
+            <div class="report-actions">
+              <button type="button" id="btn-save-draft" class="btn btn-outline">Sauvegarder brouillon</button>
+              <button type="submit" id="btn-publish" class="btn btn-primary">Publier & notifier</button>
+            </div>
+            <p id="report-status" class="form-status" hidden></p>
+          </form>
+        </div>
+      </div>
+
+      <!-- ELEVE / PARENT: Feed rapports -->
+      <div id="view-feed" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2 id="feed-title">Mes rapports</h2>
+            <p class="feed-subtitle" id="feed-subtitle"></p>
+          </div>
+
+          <!-- Sélecteur enfant pour parents -->
+          <div id="parent-child-selector" class="child-selector" hidden>
+            <label for="child-select">Enfant :</label>
+            <select id="child-select"></select>
+          </div>
+
+          <div id="reports-feed" class="reports-feed"></div>
+          <div id="feed-empty" class="empty-state" hidden>
+            <div class="empty-icon">📋</div>
+            <p>Aucun rapport pour le moment.</p>
+            <p class="empty-sub">Les rapports apparaîtront ici après chaque séance.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- DETAIL RAPPORT -->
+      <div id="view-report-detail" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <button id="btn-back-feed" class="btn btn-sm btn-outline" type="button">← Retour</button>
+          </div>
+          <article class="report-detail" id="report-detail"></article>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
