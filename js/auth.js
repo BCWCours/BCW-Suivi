@@ -102,17 +102,26 @@ const Auth = (() => {
         .eq('id', currentUser.id)
         .single();
 
+      console.log('[BCW] handleSession — user id:', currentUser.id);
+      console.log('[BCW] profile:', profile, '| error:', error);
+
       if (error || !profile) {
-        showError('Profil introuvable. Contactez BCW.');
+        const msg = error?.code === 'PGRST116'
+          ? 'Profil introuvable. Vérifiez dans Supabase > Table profiles.'
+          : `Erreur profil (${error?.code || 'inconnue'}). Réessayez.`;
+
         await supabase.auth.signOut();
+        // showLogin() est appelé par onAuthStateChange → on retarde l'affichage
+        setTimeout(() => showError(msg), 80);
         return;
       }
 
       currentProfile = profile;
       showApp();
     } catch (e) {
-      showError('Erreur de connexion au serveur. Réessayez.');
+      console.error('[BCW] handleSession exception:', e);
       await supabase.auth.signOut();
+      setTimeout(() => showError('Erreur serveur. Réessayez.'), 80);
     }
   }
 
