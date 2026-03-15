@@ -15,7 +15,17 @@ const Auth = (() => {
   let currentProfile = null;
 
   async function init() {
-    const { data: { session } } = await supabase.auth.getSession();
+    setupPasswordToggle();
+
+    let session = null;
+    try {
+      const { data } = await supabase.auth.getSession();
+      session = data.session;
+    } catch (e) {
+      showLogin();
+      return;
+    }
+
     if (session) {
       await handleSession(session);
     }
@@ -41,37 +51,90 @@ const Auth = (() => {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      loginError.textContent = 'Email ou mot de passe incorrect.';
-      loginError.hidden = false;
-      loginBtn.disabled = false;
-      loginBtn.textContent = 'Se connecter';
+      if (error) {
+        showLoginError(error);
+        return;
+      }
+    } catch (e) {
+      showError('Erreur réseau. Vérifiez votre connexion internet.');
       return;
     }
+  }
+
+  function showLoginError(error) {
+    const code = error?.message?.toLowerCase() || '';
+    let msg = 'Une erreur est survenue. Réessayez.';
+
+    if (code.includes('invalid login') || code.includes('invalid credentials') || code.includes('email not confirmed') === false && code.includes('wrong')) {
+      msg = 'Email ou mot de passe incorrect.';
+    } else if (code.includes('email not confirmed')) {
+      msg = 'Compte non confirmé. Vérifiez votre boîte mail.';
+    } else if (code.includes('too many')) {
+      msg = 'Trop de tentatives. Attendez quelques minutes.';
+    } else if (code.includes('user not found') || code.includes('no user')) {
+      msg = 'Aucun compte trouvé avec cet email.';
+    } else if (code.includes('network') || code.includes('fetch')) {
+      msg = 'Erreur réseau. Vérifiez votre connexion internet.';
+    } else if (error.message) {
+      msg = 'Email ou mot de passe incorrect.';
+    }
+
+    showError(msg);
+  }
+
+  function showError(msg) {
+    loginError.textContent = msg;
+    loginError.hidden = false;
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Se connecter';
   }
 
   async function handleSession(session) {
     currentUser = session.user;
 
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .single();
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .single();
 
-    if (error || !profile) {
-      loginError.textContent = 'Profil introuvable. Contactez BCW.';
-      loginError.hidden = false;
-      loginBtn.disabled = false;
-      loginBtn.textContent = 'Se connecter';
+      if (error || !profile) {
+        showError('Profil introuvable. Contactez BCW.');
+        await supabase.auth.signOut();
+        return;
+      }
+
+      currentProfile = profile;
+      showApp();
+    } catch (e) {
+      showError('Erreur de connexion au serveur. Réessayez.');
       await supabase.auth.signOut();
-      return;
     }
+  }
 
-    currentProfile = profile;
-    showApp();
+  function setupPasswordToggle() {
+    const passwordInput = document.getElementById('login-password');
+    const toggleBtn = document.getElementById('toggle-password');
+    if (!toggleBtn || !passwordInput) return;
+
+    toggleBtn.addEventListener('click', () => {
+      const isHidden = passwordInput.type === 'password';
+      passwordInput.type = isHidden ? 'text' : 'password';
+      toggleBtn.innerHTML = isHidden ? eyeOffIcon() : eyeIcon();
+      toggleBtn.setAttribute('aria-label', isHidden ? 'Cacher le mot de passe' : 'Voir le mot de passe');
+    });
+  }
+
+  function eyeIcon() {
+    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  }
+
+  function eyeOffIcon() {
+    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
   }
 
   function showLogin() {
