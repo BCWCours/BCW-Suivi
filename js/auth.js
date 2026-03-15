@@ -114,6 +114,17 @@ const Auth = (() => {
       }
 
       currentProfile = profile;
+
+      // Auto-lien au premier login (si inscription via register.html)
+      if (profile.role === 'eleve') {
+        await supabase.rpc('link_student_profile').catch(() => {});
+      } else if (profile.role === 'parent') {
+        const childEmail = currentUser.user_metadata?.child_email;
+        if (childEmail) {
+          await supabase.rpc('link_parent_to_child', { p_child_email: childEmail }).catch(() => {});
+        }
+      }
+
       showApp();
     } catch (e) {
       console.error('[BCW] handleSession exception:', e);

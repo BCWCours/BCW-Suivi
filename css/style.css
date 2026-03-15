@@ -518,6 +518,98 @@ body {
   .topbar-user span { display: none; }
 }
 
+/* ========== INSCRIPTION ==========  */
+#view-register {
+  min-height: 100vh;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 50%, var(--navy-light) 100%);
+  padding: 20px;
+}
+#view-register.active { display: flex; }
+
+.reg-step-label {
+  color: rgba(255,255,255,0.75);
+  font-size: 0.938rem;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.role-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.role-card {
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: var(--radius);
+  padding: 24px 16px;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.role-card:hover {
+  background: rgba(255,255,255,0.18);
+  border-color: var(--orange);
+  transform: translateY(-2px);
+}
+.role-icon { font-size: 2rem; }
+.role-label { font-size: 1rem; font-weight: 700; }
+.role-sub { font-size: 0.75rem; opacity: 0.7; }
+
+.reg-login-link {
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgba(255,255,255,0.65);
+}
+.reg-login-link a { color: #fff; font-weight: 600; text-decoration: underline; }
+
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.813rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 16px;
+  font-family: inherit;
+  transition: color var(--transition);
+}
+.btn-back:hover { color: var(--navy); }
+
+.reg-role-badge {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 20px;
+}
+
+.field-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.reg-success {
+  text-align: center;
+  padding: 40px 32px;
+}
+.success-icon { font-size: 3rem; margin-bottom: 16px; }
+.reg-success h2 { font-size: 1.5rem; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px; }
+.success-sub { color: var(--text-secondary); font-size: 0.938rem; line-height: 1.6; }
+
+@media (max-width: 400px) {
+  .role-cards { grid-template-columns: 1fr; }
+}
+
 @media print {
   .topbar, .page-header button, #btn-logout { display: none; }
   .report-detail { box-shadow: none; padding: 0; }
