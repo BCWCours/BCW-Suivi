@@ -102,9 +102,6 @@ const Auth = (() => {
         .eq('id', currentUser.id)
         .single();
 
-      console.log('[BCW] handleSession — user id:', currentUser.id);
-      console.log('[BCW] profile:', profile, '| error:', error);
-
       if (error || !profile) {
         const msg = error?.code === 'PGRST116'
           ? 'Profil introuvable. Vérifiez dans Supabase > Table profiles.'
