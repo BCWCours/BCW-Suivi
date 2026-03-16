@@ -95,27 +95,35 @@ const Auth = (() => {
   async function handleSession(session) {
     currentUser = session.user;
 
+    // ── Étape 1 : lecture du profil ──────────────────────────────
+    let profile;
     try {
-      const { data: profile, error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', currentUser.id)
         .single();
 
-      if (error || !profile) {
+      if (error || !data) {
         const msg = error?.code === 'PGRST116'
-          ? 'Profil introuvable. Vérifiez dans Supabase > Table profiles.'
-          : `Erreur profil (${error?.code || 'inconnue'}). Réessayez.`;
-
+          ? 'Profil introuvable. Contactez Bilal.'
+          : `Erreur profil (${error?.code || 'inconnue'}) : ${error?.message || ''}`;
         await supabase.auth.signOut();
-        // showLogin() est appelé par onAuthStateChange → on retarde l'affichage
         setTimeout(() => showError(msg), 80);
         return;
       }
+      profile = data;
+    } catch (e) {
+      console.error('[BCW] étape 1 exception:', e);
+      await supabase.auth.signOut();
+      setTimeout(() => showError(`Étape 1 – ${e?.message || 'Erreur réseau'}`), 80);
+      return;
+    }
 
-      currentProfile = profile;
+    currentProfile = profile;
 
-      // Auto-lien au premier login (si inscription via register.html)
+    // ── Étape 2 : lien auto (silencieux) ────────────────────────
+    try {
       if (profile.role === 'eleve') {
         await supabase.rpc('link_student_profile').catch(() => {});
       } else if (profile.role === 'parent') {
@@ -124,15 +132,18 @@ const Auth = (() => {
           await supabase.rpc('link_parent_to_child', { p_child_email: childEmail }).catch(() => {});
         }
       }
+    } catch (e) {
+      // non bloquant
+      console.warn('[BCW] étape 2 (lien auto) :', e);
+    }
 
+    // ── Étape 3 : affichage de l'app ────────────────────────────
+    try {
       showApp();
     } catch (e) {
-      console.error('[BCW] handleSession exception:', e);
+      console.error('[BCW] étape 3 (showApp) exception:', e);
       await supabase.auth.signOut();
-      const msg = e?.message
-        ? `Erreur: ${e.message}`
-        : (e?.code ? `Erreur code ${e.code}` : 'Erreur serveur inconnue.');
-      setTimeout(() => showError(msg), 80);
+      setTimeout(() => showError(`Étape 3 – ${e?.message || 'Erreur affichage'}`), 80);
     }
   }
 
