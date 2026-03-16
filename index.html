@@ -39,71 +39,122 @@
         <button type="submit" class="btn btn-primary btn-full" id="login-btn">Se connecter</button>
         <p id="login-error" class="form-error" hidden></p>
       </form>
-      <p class="reg-login-link" style="margin-top:20px;">Pas encore de compte ? <a href="register.html">S'inscrire</a></p>
+      <p class="reg-login-link" style="margin-top:12px;">
+        <a href="reset-password.html" class="link-subtle">Mot de passe oublié ?</a>
+      </p>
+      <p class="reg-login-link" style="margin-top:8px;">
+        Pas encore de compte ? <a href="register.html">S'inscrire</a>
+      </p>
     </div>
   </div>
 
   <!-- ========== APP SHELL ========== -->
   <div id="app-shell" class="app-shell" hidden>
+
+    <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-inner">
         <div class="topbar-brand">BCW Suivi</div>
         <div class="topbar-user">
+          <button id="btn-messages-icon" class="btn-icon msg-icon" type="button" aria-label="Messages" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span id="msg-badge" class="notif-badge" hidden>0</span>
+          </button>
           <span id="topbar-name"></span>
           <button id="btn-logout" class="btn btn-sm btn-outline" type="button">Déconnexion</button>
         </div>
       </div>
     </header>
 
+    <!-- NAV TABS -->
+    <nav id="app-nav" class="app-nav" hidden>
+      <!-- Prof tabs -->
+      <button class="nav-tab" data-view="profDashboard" data-roles="prof" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Élèves
+      </button>
+      <button class="nav-tab" data-view="allReports" data-roles="prof" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Rapports
+      </button>
+      <button class="nav-tab" data-view="calendar" data-roles="prof" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Agenda
+      </button>
+      <!-- Élève / Parent tabs -->
+      <button class="nav-tab" data-view="feed" data-roles="eleve parent" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Rapports
+      </button>
+      <!-- Messages (all roles) -->
+      <button class="nav-tab" data-view="messages" data-roles="prof eleve parent" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        Messages
+        <span id="nav-msg-badge" class="nav-badge" hidden>0</span>
+      </button>
+    </nav>
+
     <main class="main-content">
 
-      <!-- PROF: Liste élèves -->
+      <!-- ── PROF: Liste élèves ── -->
       <div id="view-prof-dashboard" class="view" hidden>
         <div class="container">
           <div class="page-header">
             <h2>Mes élèves</h2>
+            <button id="btn-add-student" class="btn btn-primary btn-sm" type="button">+ Ajouter</button>
+          </div>
+          <!-- Stats rapides -->
+          <div id="prof-stats" class="stats-bar" hidden>
+            <div class="stat-item">
+              <span class="stat-value" id="stat-students">0</span>
+              <span class="stat-label">élèves</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="stat-sessions">0</span>
+              <span class="stat-label">séances ce mois</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="stat-avg">—</span>
+              <span class="stat-label">note moy.</span>
+            </div>
           </div>
           <div id="prof-students-list" class="students-grid"></div>
         </div>
       </div>
 
-      <!-- PROF: Rédiger rapport -->
+      <!-- ── PROF: Rédiger / Modifier rapport ── -->
       <div id="view-report-editor" class="view" hidden>
         <div class="container">
           <div class="page-header">
             <button id="btn-back-dashboard" class="btn btn-sm btn-outline" type="button">← Retour</button>
-            <h2>Rédiger un rapport</h2>
+            <h2 id="editor-title">Rédiger un rapport</h2>
           </div>
           <form id="report-form" class="report-form">
+            <input type="hidden" id="report-edit-id" value="" />
             <div class="report-student-info" id="report-student-info"></div>
 
             <div class="form-group">
               <label for="report-date">Date de la séance</label>
               <input type="date" id="report-date" required />
             </div>
-
             <div class="form-group">
               <label for="report-subjects">Matières abordées</label>
               <input type="text" id="report-subjects" required placeholder="Ex: Algèbre, fonctions du 2nd degré" />
             </div>
-
             <div class="form-group">
               <label for="report-strengths">Points forts</label>
               <textarea id="report-strengths" rows="3" required placeholder="Ce que l'élève a bien fait..."></textarea>
             </div>
-
             <div class="form-group">
               <label for="report-improvements">À travailler</label>
               <textarea id="report-improvements" rows="3" required placeholder="Ce qu'il faut renforcer..."></textarea>
             </div>
-
             <div class="form-group">
               <label for="report-resources">Ressources (optionnel)</label>
               <textarea id="report-resources" rows="2" placeholder="Liens, documents, exercices recommandés..."></textarea>
             </div>
-
             <div class="form-group">
-              <label for="report-score">Appréciation (1 à 5)</label>
+              <label>Appréciation (1 à 5)</label>
               <div class="score-selector" id="score-selector">
                 <button type="button" class="score-btn" data-score="1">1</button>
                 <button type="button" class="score-btn" data-score="2">2</button>
@@ -113,30 +164,36 @@
               </div>
               <input type="hidden" id="report-score" />
             </div>
-
             <div class="report-actions">
-              <button type="button" id="btn-save-draft" class="btn btn-outline">Sauvegarder brouillon</button>
-              <button type="submit" id="btn-publish" class="btn btn-primary">Publier & notifier</button>
+              <button type="button" id="btn-save-draft" class="btn btn-outline">Brouillon</button>
+              <button type="submit" id="btn-publish" class="btn btn-primary">Publier</button>
             </div>
             <p id="report-status" class="form-status" hidden></p>
           </form>
         </div>
       </div>
 
-      <!-- ELEVE / PARENT: Feed rapports -->
+      <!-- ── ÉLÈVE / PARENT / PROF: Feed rapports ── -->
       <div id="view-feed" class="view" hidden>
         <div class="container">
           <div class="page-header">
             <h2 id="feed-title">Mes rapports</h2>
             <p class="feed-subtitle" id="feed-subtitle"></p>
           </div>
-
-          <!-- Sélecteur enfant pour parents -->
+          <!-- Sélecteur enfant (parents multi-enfants) -->
           <div id="parent-child-selector" class="child-selector" hidden>
             <label for="child-select">Enfant :</label>
             <select id="child-select"></select>
           </div>
-
+          <!-- Résumé mensuel -->
+          <div id="monthly-summary" class="monthly-summary" hidden></div>
+          <!-- Filtres -->
+          <div id="feed-filters" class="feed-filters" hidden>
+            <input type="text" id="filter-subject" placeholder="🔍 Matière..." class="filter-input" />
+            <select id="filter-month" class="filter-select">
+              <option value="">Tous les mois</option>
+            </select>
+          </div>
           <div id="reports-feed" class="reports-feed"></div>
           <div id="feed-empty" class="empty-state" hidden>
             <div class="empty-icon">📋</div>
@@ -146,17 +203,166 @@
         </div>
       </div>
 
-      <!-- DETAIL RAPPORT -->
+      <!-- ── TOUS LES RAPPORTS (prof) ── -->
+      <div id="view-all-reports" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2>Tous les rapports</h2>
+          </div>
+          <!-- Filtres globaux -->
+          <div class="feed-filters">
+            <select id="all-filter-student" class="filter-select">
+              <option value="">Tous les élèves</option>
+            </select>
+            <input type="text" id="all-filter-subject" placeholder="🔍 Matière..." class="filter-input" />
+            <select id="all-filter-month" class="filter-select">
+              <option value="">Tous les mois</option>
+            </select>
+          </div>
+          <div id="all-reports-feed" class="reports-feed"></div>
+          <div id="all-reports-empty" class="empty-state" hidden>
+            <div class="empty-icon">📋</div>
+            <p>Aucun rapport.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── AGENDA / CALENDRIER (prof) ── -->
+      <div id="view-calendar" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2>Agenda</h2>
+            <button id="btn-schedule-session" class="btn btn-primary btn-sm" type="button">+ Planifier</button>
+          </div>
+          <div class="calendar-nav">
+            <button id="cal-prev" class="btn btn-sm btn-outline">‹</button>
+            <span id="cal-month-label" class="cal-month-label"></span>
+            <button id="cal-next" class="btn btn-sm btn-outline">›</button>
+          </div>
+          <div id="calendar-grid" class="calendar-grid"></div>
+          <div id="calendar-day-events" class="calendar-day-events" hidden>
+            <h3 id="cal-day-title"></h3>
+            <div id="cal-day-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DETAIL RAPPORT ── -->
       <div id="view-report-detail" class="view" hidden>
         <div class="container">
           <div class="page-header">
             <button id="btn-back-feed" class="btn btn-sm btn-outline" type="button">← Retour</button>
           </div>
           <article class="report-detail" id="report-detail"></article>
+          <!-- Commentaires -->
+          <section id="comments-section" class="comments-section">
+            <h3 class="comments-title">Commentaires</h3>
+            <div id="comments-list" class="comments-list"></div>
+            <form id="comment-form" class="comment-form">
+              <textarea id="comment-input" rows="2" placeholder="Ajouter un commentaire..." required></textarea>
+              <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+            </form>
+          </section>
+        </div>
+      </div>
+
+      <!-- ── MESSAGES ── -->
+      <div id="view-messages" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2>Messages</h2>
+          </div>
+          <div class="messages-layout">
+            <div id="conversations-list" class="conversations-list"></div>
+            <div id="chat-panel" class="chat-panel" hidden>
+              <div class="chat-header">
+                <button id="btn-back-conversations" class="btn btn-sm btn-outline">← Retour</button>
+                <span id="chat-with-name"></span>
+              </div>
+              <div id="chat-messages" class="chat-messages"></div>
+              <form id="chat-form" class="chat-form">
+                <input type="text" id="chat-input" placeholder="Écrire un message..." required autocomplete="off" />
+                <button type="submit" class="btn btn-primary btn-sm">Envoyer</button>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
 
     </main>
+  </div>
+
+  <!-- ========== MODAL OVERLAY ========== -->
+  <div id="modal-overlay" class="modal-overlay" hidden>
+
+    <!-- Modal : Ajouter un élève (prof) -->
+    <div id="modal-add-student" class="modal" hidden>
+      <div class="modal-header">
+        <h3>Ajouter un élève</h3>
+        <button class="modal-close" data-modal="modal-add-student" type="button">✕</button>
+      </div>
+      <form id="add-student-form" class="modal-form">
+        <div class="form-group">
+          <label for="as-name">Nom complet</label>
+          <input type="text" id="as-name" required placeholder="Lucas Martin" />
+        </div>
+        <div class="form-group">
+          <label>Niveau</label>
+          <div class="radio-row">
+            <label class="radio-opt">
+              <input type="radio" name="as-level" value="secondaire" required /> Secondaire
+            </label>
+            <label class="radio-opt">
+              <input type="radio" name="as-level" value="superieur" /> Supérieur
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="as-email">Email (optionnel)</label>
+          <input type="email" id="as-email" placeholder="lucas@email.com" />
+          <p class="field-hint">Si renseigné, l'élève pourra se connecter avec cet email.</p>
+        </div>
+        <p id="add-student-error" class="form-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline modal-close" data-modal="modal-add-student">Annuler</button>
+          <button type="submit" id="btn-add-student-submit" class="btn btn-primary">Ajouter</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Modal : Planifier une séance -->
+    <div id="modal-schedule" class="modal" hidden>
+      <div class="modal-header">
+        <h3>Planifier une séance</h3>
+        <button class="modal-close" data-modal="modal-schedule" type="button">✕</button>
+      </div>
+      <form id="schedule-form" class="modal-form">
+        <input type="hidden" id="sched-student-id" />
+        <div id="sched-student-name" class="modal-subtitle"></div>
+        <div class="form-group">
+          <label for="sched-date">Date</label>
+          <input type="date" id="sched-date" required />
+        </div>
+        <div class="form-group">
+          <label for="sched-time">Heure</label>
+          <input type="time" id="sched-time" required />
+        </div>
+        <div class="form-group">
+          <label for="sched-subject">Matière / sujet</label>
+          <input type="text" id="sched-subject" placeholder="Ex: Algèbre, grammaire..." />
+        </div>
+        <div class="form-group">
+          <label for="sched-notes">Notes (optionnel)</label>
+          <textarea id="sched-notes" rows="2" placeholder="Informations complémentaires..."></textarea>
+        </div>
+        <p id="schedule-error" class="form-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline modal-close" data-modal="modal-schedule">Annuler</button>
+          <button type="submit" id="btn-schedule-submit" class="btn btn-primary">Planifier</button>
+        </div>
+      </form>
+    </div>
+
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/dist/umd/supabase.min.js"></script>
