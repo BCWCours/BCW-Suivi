@@ -129,7 +129,10 @@ const Auth = (() => {
     } catch (e) {
       console.error('[BCW] handleSession exception:', e);
       await supabase.auth.signOut();
-      setTimeout(() => showError('Erreur serveur. Réessayez.'), 80);
+      const msg = e?.message
+        ? `Erreur: ${e.message}`
+        : (e?.code ? `Erreur code ${e.code}` : 'Erreur serveur inconnue.');
+      setTimeout(() => showError(msg), 80);
     }
   }
 
