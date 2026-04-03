@@ -20,6 +20,10 @@ const App = (() => {
   let currentDetailReport = null;
   let currentFeedStudentId = null;
 
+  function isProfLike() {
+    return profile?.role === 'prof' || profile?.role === 'admin';
+  }
+
   const views = {
     profDashboard: document.getElementById('view-prof-dashboard'),
     reportEditor:  document.getElementById('view-report-editor'),
@@ -40,7 +44,7 @@ const App = (() => {
     setupEventListeners();
     setupModals();
 
-    if (profile.role === 'prof') {
+    if (isProfLike()) {
       showView('profDashboard');
       loadProfDashboard();
     } else if (profile.role === 'eleve') {
@@ -69,7 +73,7 @@ const App = (() => {
     } catch {}
   }
   function isNew(report) {
-    if (profile.role === 'prof') return false;
+    if (isProfLike()) return false;
     return !seenReports.has(report.id);
   }
 
@@ -81,7 +85,8 @@ const App = (() => {
     nav.hidden = false;
     nav.querySelectorAll('.nav-tab').forEach(tab => {
       const roles = tab.dataset.roles?.split(' ') || [];
-      if (roles.includes(profile.role)) {
+      const canSeeTab = roles.includes(profile.role) || (profile.role === 'admin' && roles.includes('prof'));
+      if (canSeeTab) {
         tab.hidden = false;
         tab.addEventListener('click', () => {
           const v = tab.dataset.view;
@@ -128,7 +133,7 @@ const App = (() => {
       showView('profDashboard');
     });
     document.getElementById('btn-back-feed')?.addEventListener('click', () => {
-      if (profile.role === 'prof') showView('profDashboard');
+      if (isProfLike()) showView('profDashboard');
       else showView('feed');
     });
     document.getElementById('btn-back-conversations')?.addEventListener('click', () => {
@@ -546,7 +551,7 @@ const App = (() => {
     let filtered  = allReports;
     if (subject) filtered = filtered.filter(r => r.subjects_covered?.toLowerCase().includes(subject));
     if (month)   filtered = filtered.filter(r => r.session_date?.startsWith(month));
-    renderReportsFeed(filtered, null, profile.role === 'prof');
+    renderReportsFeed(filtered, null, isProfLike());
   }
 
   function buildMonthFilter(selectId, reports) {
@@ -1080,7 +1085,7 @@ const App = (() => {
 
     // Get all contacts based on role
     let contacts = [];
-    if (profile.role === 'prof') {
+    if (isProfLike()) {
       // Parents of my students
       const { data: links } = await supabase
         .from('teacher_students')
