@@ -3,8 +3,8 @@
 // =============================================
 
 const BCW_CONFIG = {
-  SUPABASE_URL: 'https://kiwuncwivajenqyinrqb.supabase.co',
-  SUPABASE_KEY: 'sb_publishable_sxowccgePeTvJjwF68CIhQ_KMqiYTTw',
+  SUPABASE_URL: 'https://tfpctoufuokxridfkadc.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_zWQKWfqbAXqGqn2PZOm8CQ_UPbI0_z8',
 };
 
 const supabase = window.supabase.createClient(
