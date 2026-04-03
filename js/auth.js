@@ -23,6 +23,40 @@ const Auth = (() => {
     return raw;
   }
 
+  function normalizePhone(raw) {
+    const str = String(raw || '').trim();
+    if (!str) return '';
+
+    const compact = str.replace(/[\s().-]/g, '');
+    if (!compact) return '';
+
+    if (compact.startsWith('+')) return compact;
+    if (compact.startsWith('00')) return `+${compact.slice(2)}`;
+    if (compact.startsWith('32')) return `+${compact}`;
+    if (compact.startsWith('0')) return `+32${compact.slice(1)}`;
+
+    return compact;
+  }
+
+  function toPhoneLoginEmail(raw) {
+    const normalized = normalizePhone(raw);
+    if (!normalized) return '';
+    const digits = normalized.replace(/\D/g, '');
+    if (!digits) return '';
+    return `tel_${digits}@auth.bcw.local`;
+  }
+
+  function resolveLoginEmail(identifierRaw) {
+    const identifier = String(identifierRaw || '').trim().toLowerCase();
+    if (!identifier) return '';
+    if (identifier.includes('@')) return identifier;
+
+    const phoneEmail = toPhoneLoginEmail(identifier);
+    if (phoneEmail) return phoneEmail;
+
+    return identifier;
+  }
+
   async function init() {
     setupPasswordToggle();
 
@@ -57,8 +91,9 @@ const Auth = (() => {
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="spinner"></span>';
 
-    const email = document.getElementById('login-email').value.trim();
+    const identifier = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
+    const email = resolveLoginEmail(identifier);
 
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -78,17 +113,17 @@ const Auth = (() => {
     let msg = 'Une erreur est survenue. Réessayez.';
 
     if (code.includes('invalid login') || code.includes('invalid credentials') || code.includes('email not confirmed') === false && code.includes('wrong')) {
-      msg = 'Email ou mot de passe incorrect.';
+      msg = 'Identifiant ou mot de passe incorrect.';
     } else if (code.includes('email not confirmed')) {
       msg = 'Compte non confirmé. Vérifiez votre boîte mail.';
     } else if (code.includes('too many')) {
       msg = 'Trop de tentatives. Attendez quelques minutes.';
     } else if (code.includes('user not found') || code.includes('no user')) {
-      msg = 'Aucun compte trouvé avec cet email.';
+      msg = 'Aucun compte trouvé avec cet identifiant.';
     } else if (code.includes('network') || code.includes('fetch')) {
       msg = 'Erreur réseau. Vérifiez votre connexion internet.';
     } else if (error.message) {
-      msg = 'Email ou mot de passe incorrect.';
+      msg = 'Identifiant ou mot de passe incorrect.';
     }
 
     showError(msg);
