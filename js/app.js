@@ -20,8 +20,13 @@ const App = (() => {
   let currentDetailReport = null;
   let currentFeedStudentId = null;
 
+  function getRole() {
+    return String(profile?.role || '').trim().toLowerCase();
+  }
+
   function isProfLike() {
-    return profile?.role === 'prof' || profile?.role === 'admin';
+    const role = getRole();
+    return role === 'prof' || role === 'admin';
   }
 
   const views = {
@@ -44,15 +49,21 @@ const App = (() => {
     setupEventListeners();
     setupModals();
 
+    const role = getRole();
+
     if (isProfLike()) {
       showView('profDashboard');
       loadProfDashboard();
-    } else if (profile.role === 'eleve') {
+    } else if (role === 'eleve') {
       showView('feed');
       loadStudentFeed();
-    } else if (profile.role === 'parent') {
+    } else if (role === 'parent') {
       showView('feed');
       loadParentFeed();
+    } else {
+      // Fallback to avoid blank screen when role is unexpected.
+      showView('profDashboard');
+      loadProfDashboard();
     }
     loadUnreadCount();
   }
@@ -85,7 +96,8 @@ const App = (() => {
     nav.hidden = false;
     nav.querySelectorAll('.nav-tab').forEach(tab => {
       const roles = tab.dataset.roles?.split(' ') || [];
-      const canSeeTab = roles.includes(profile.role) || (profile.role === 'admin' && roles.includes('prof'));
+      const role = getRole();
+      const canSeeTab = roles.includes(role) || (role === 'admin' && roles.includes('prof'));
       if (canSeeTab) {
         tab.hidden = false;
         tab.addEventListener('click', () => {
@@ -95,8 +107,8 @@ const App = (() => {
           else if (v === 'allReports') loadAllReports();
           else if (v === 'calendar') renderCalendar();
           else if (v === 'feed') {
-            if (profile.role === 'eleve') loadStudentFeed();
-            else if (profile.role === 'parent') loadParentFeed();
+            if (role === 'eleve') loadStudentFeed();
+            else if (role === 'parent') loadParentFeed();
           }
           else if (v === 'messages') loadMessages();
         });

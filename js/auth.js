@@ -14,6 +14,15 @@ const Auth = (() => {
   let currentUser = null;
   let currentProfile = null;
 
+  function normalizeRole(role) {
+    const raw = String(role || '').trim().toLowerCase();
+    if (raw === 'prof' || raw === 'teacher' || raw === 'professeur') return 'prof';
+    if (raw === 'eleve' || raw === 'élève' || raw === 'student') return 'eleve';
+    if (raw === 'parent') return 'parent';
+    if (raw === 'admin' || raw === 'administrator') return 'admin';
+    return raw;
+  }
+
   async function init() {
     setupPasswordToggle();
 
@@ -113,6 +122,7 @@ const Auth = (() => {
         return;
       }
       profile = data;
+      profile.role = normalizeRole(profile.role);
     } catch (e) {
       console.error('[BCW] étape 1 exception:', e);
       await supabase.auth.signOut();
