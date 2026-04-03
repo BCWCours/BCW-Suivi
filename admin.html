@@ -30,7 +30,7 @@
     .bar-track { flex: 1; background: var(--bg); border-radius: 4px; height: 10px; overflow: hidden; }
     .bar-fill  { height: 100%; background: var(--navy); border-radius: 4px; transition: width 0.5s ease; }
     .bar-count { width: 32px; text-align: right; color: var(--text-muted); font-size: 0.75rem; }
-    #create-prof-form { background: var(--card); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+    #create-account-form { background: var(--card); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
   </style>
 </head>
 <body>
@@ -57,21 +57,51 @@
       <div class="barchart" id="barchart"></div>
     </div>
 
-    <!-- Créer un compte prof (feature U) -->
+    <!-- Créer un compte (invite-only) -->
     <div class="admin-section">
-      <h2>➕ Créer un compte prof</h2>
-      <div id="create-prof-form">
+      <h2>➕ Créer un compte (invitation admin)</h2>
+      <div id="create-account-form">
         <div class="form-group">
-          <label for="prof-name">Nom complet</label>
-          <input type="text" id="prof-name" placeholder="Sami Benali" />
+          <label for="create-name">Nom complet</label>
+          <input type="text" id="create-name" placeholder="Sami Benali" />
         </div>
         <div class="form-group">
-          <label for="prof-email">Email</label>
-          <input type="email" id="prof-email" placeholder="sami@bcwcours.be" />
+          <label for="create-email">Email</label>
+          <input type="email" id="create-email" placeholder="sami@bcwcours.be" />
         </div>
-        <p id="create-prof-msg" class="form-error" hidden></p>
-        <button id="btn-create-prof" class="btn btn-primary">Créer & envoyer lien de connexion</button>
-        <p class="field-hint" style="margin-top:8px;">Un email sera envoyé au prof pour définir son mot de passe.</p>
+        <div class="form-group">
+          <label for="create-role">Rôle</label>
+          <select id="create-role">
+            <option value="prof">Prof</option>
+            <option value="eleve">Élève</option>
+            <option value="parent">Parent</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="field-create-level" hidden>
+          <label for="create-level">Niveau de l'élève</label>
+          <select id="create-level">
+            <option value="secondaire">Secondaire</option>
+            <option value="superieur">Supérieur</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="field-create-teacher" hidden>
+          <label for="create-teacher-id">Prof assigné</label>
+          <select id="create-teacher-id">
+            <option value="">Chargement...</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="field-create-child-email" hidden>
+          <label for="create-child-email">Email de l'enfant (optionnel)</label>
+          <input type="email" id="create-child-email" placeholder="eleve@email.com" />
+          <p class="field-hint">Si l'élève existe déjà, le lien parent-enfant sera créé automatiquement.</p>
+        </div>
+
+        <p id="create-account-msg" class="form-error" hidden></p>
+        <button id="btn-create-account" class="btn btn-primary">Créer & envoyer lien de connexion</button>
+        <p class="field-hint" style="margin-top:8px;">Inscription publique désactivée: seuls les comptes créés ici peuvent accéder à BCW Suivi.</p>
       </div>
     </div>
 
