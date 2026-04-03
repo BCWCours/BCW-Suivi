@@ -3,7 +3,13 @@
 // Invite-only provisioning for prof/eleve/parent
 // =============================================
 
-const ADMIN_EMAILS = ['bilal.zeamari@bcwcours.be', 'bilal@bcwcours.be', 'bilal.zeamari@gmail.com'];
+const ADMIN_EMAILS = [
+  'bilal.zeamari@bcwcours.be',
+  'bilal@bcwcours.be',
+  'bilal.zeamari@gmail.com',
+  'zeamari.b@hotmail.com',
+  'samimoussaoui2002@gmail.com'
+];
 const STUDENT_LEVELS = new Set(['secondaire', 'superieur']);
 
 let currentSession = null;
