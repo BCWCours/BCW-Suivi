@@ -29,16 +29,42 @@ $$;
 
 grant execute on function public.is_staff() to anon, authenticated, service_role;
 
+-- Helper parent/enfant pour eviter la recursion RLS
+create or replace function public.is_parent_of_student(p_student_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.parent_students ps
+    where ps.parent_id = auth.uid()
+      and ps.student_id = p_student_id
+  );
+$$;
+
+grant execute on function public.is_parent_of_student(uuid) to anon, authenticated, service_role;
+
 -- 3) Politiques staff (remplace les anciennes version prof-only)
 drop policy if exists "Profs can view all profiles" on public.profiles;
 create policy "Profs can view all profiles"
   on public.profiles for select
   using (public.is_staff());
 
+-- IMPORTANT: cette policy cree une recursion quand on lit teacher_students + embed students
+drop policy if exists "Profs can view their students" on public.students;
+
 drop policy if exists "Profs can view all students" on public.students;
 create policy "Profs can view all students"
   on public.students for select
   using (public.is_staff());
+
+drop policy if exists "Parents can view their children" on public.students;
+create policy "Parents can view their children"
+  on public.students for select
+  using (public.is_parent_of_student(id));
 
 drop policy if exists "Profs can insert students" on public.students;
 create policy "Profs can insert students"
