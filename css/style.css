@@ -371,6 +371,87 @@ body {
   margin-top: 6px;
 }
 
+/* ========== SESSIONS VIEW ========== */
+.sessions-list {
+  display: grid;
+  gap: 12px;
+}
+.session-item {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.session-item h3 {
+  font-size: 1rem;
+  color: var(--text);
+}
+.session-meta {
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.session-notes {
+  font-size: 0.813rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.session-actions {
+  flex-shrink: 0;
+}
+
+/* ========== GROUPS VIEW ========== */
+.groups-grid {
+  display: grid;
+  gap: 12px;
+}
+.group-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+.group-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.group-card-head h3 {
+  font-size: 1rem;
+  color: var(--text);
+}
+.group-meta {
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.group-members {
+  font-size: 0.813rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+.group-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.group-actions select {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-family: inherit;
+  font-size: 0.875rem;
+  background: var(--card);
+}
+
 .badge-month {
   display: inline-block;
   font-size: 0.688rem;
@@ -869,6 +950,9 @@ body {
   .cal-day-num { font-size: 0.75rem; }
   .messages-layout { gap: 0; }
   .chat-panel { height: calc(100vh - 180px); }
+  .session-item { flex-direction: column; }
+  .session-actions { align-self: flex-end; }
+  .group-actions { flex-direction: column; align-items: stretch; }
 }
 @media (max-width: 480px) {
   .login-form  { padding: 24px 20px; }

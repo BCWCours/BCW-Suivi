@@ -81,6 +81,14 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         Agenda
       </button>
+      <button class="nav-tab" data-view="sessions" data-roles="prof" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18"/><path d="M9 15h6"/></svg>
+        Séances
+      </button>
+      <button class="nav-tab" data-view="groups" data-roles="prof" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+        Groupes
+      </button>
       <!-- Élève / Parent tabs -->
       <button class="nav-tab" data-view="feed" data-roles="eleve parent" hidden>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -253,6 +261,71 @@
             <h3 id="cal-day-title"></h3>
             <div id="cal-day-list"></div>
           </div>
+          <p id="calendar-error" class="form-error" hidden></p>
+        </div>
+      </div>
+
+      <!-- ── SÉANCES (prof) ── -->
+      <div id="view-sessions" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2>Mes séances</h2>
+            <button id="btn-schedule-session-2" class="btn btn-primary btn-sm" type="button">+ Planifier</button>
+          </div>
+          <p id="sessions-meta" class="feed-subtitle"></p>
+          <div id="sessions-list" class="sessions-list"></div>
+          <div id="sessions-empty" class="empty-state" hidden>
+            <div class="empty-icon">📅</div>
+            <p>Aucune séance planifiée.</p>
+            <p class="empty-sub">Planifie une séance pour la voir apparaître ici.</p>
+          </div>
+          <p id="sessions-error" class="form-error" hidden></p>
+        </div>
+      </div>
+
+      <!-- ── GROUPES (prof) ── -->
+      <div id="view-groups" class="view" hidden>
+        <div class="container">
+          <div class="page-header">
+            <h2>Groupes</h2>
+          </div>
+          <form id="group-create-form" class="report-form">
+            <div class="form-group">
+              <label for="group-name">Nom du groupe</label>
+              <input type="text" id="group-name" required placeholder="Ex: Aide devoirs S4 mercredi" />
+            </div>
+            <div class="form-group">
+              <label for="group-type">Type</label>
+              <select id="group-type">
+                <option value="group">Groupe</option>
+                <option value="one_to_one">1v1</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="group-level">Niveau</label>
+              <select id="group-level">
+                <option value="secondaire">Secondaire</option>
+                <option value="superieur">Supérieur</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="group-subject">Matière</label>
+              <input type="text" id="group-subject" placeholder="Ex: Math / Aide aux devoirs" />
+            </div>
+            <button id="btn-group-create" type="submit" class="btn btn-primary">Créer le groupe</button>
+            <p id="group-create-error" class="form-error" hidden></p>
+          </form>
+
+          <div class="page-header">
+            <h2>Mes groupes</h2>
+          </div>
+          <div id="groups-list" class="groups-grid"></div>
+          <div id="groups-empty" class="empty-state" hidden>
+            <div class="empty-icon">👥</div>
+            <p>Aucun groupe créé.</p>
+            <p class="empty-sub">Crée un groupe puis ajoute des élèves.</p>
+          </div>
+          <p id="groups-error" class="form-error" hidden></p>
         </div>
       </div>
 
@@ -381,8 +454,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260404-4"></script>
-  <script src="js/auth.js?v=20260404-4"></script>
-  <script src="js/app.js?v=20260404-4"></script>
+  <script src="js/config.js?v=20260404-5"></script>
+  <script src="js/auth.js?v=20260404-5"></script>
+  <script src="js/app.js?v=20260404-5"></script>
 </body>
 </html>

@@ -36,6 +36,8 @@ const App = (() => {
     reportDetail:  document.getElementById('view-report-detail'),
     allReports:    document.getElementById('view-all-reports'),
     calendar:      document.getElementById('view-calendar'),
+    sessions:      document.getElementById('view-sessions'),
+    groups:        document.getElementById('view-groups'),
     messages:      document.getElementById('view-messages'),
   };
 
@@ -106,6 +108,8 @@ const App = (() => {
           if (v === 'profDashboard') loadProfDashboard();
           else if (v === 'allReports') loadAllReports();
           else if (v === 'calendar') renderCalendar();
+          else if (v === 'sessions') loadSessionsView();
+          else if (v === 'groups') loadGroupsView();
           else if (v === 'feed') {
             if (role === 'eleve') loadStudentFeed();
             else if (role === 'parent') loadParentFeed();
@@ -182,6 +186,9 @@ const App = (() => {
     document.getElementById('btn-schedule-session')?.addEventListener('click', () => {
       openScheduleModal('', '');
     });
+    document.getElementById('btn-schedule-session-2')?.addEventListener('click', () => {
+      openScheduleModal('', '');
+    });
 
     // Calendar nav
     document.getElementById('cal-prev')?.addEventListener('click', () => {
@@ -214,6 +221,12 @@ const App = (() => {
     document.getElementById('chat-form')?.addEventListener('submit', e => {
       e.preventDefault();
       sendMessage();
+    });
+
+    // Groups
+    document.getElementById('group-create-form')?.addEventListener('submit', e => {
+      e.preventDefault();
+      submitCreateGroup();
     });
   }
 
@@ -249,6 +262,17 @@ const App = (() => {
   // ─────────────────────────────────────────
   //  PROF DASHBOARD (feature E — stats)
   // ─────────────────────────────────────────
+  async function ensureTeacherStudentsLoaded() {
+    if (allStudents.length) return allStudents;
+    const { data, error } = await supabase
+      .from('teacher_students')
+      .select('students(id, full_name, level)')
+      .eq('teacher_id', profile.id);
+    if (error) return [];
+    allStudents = (data || []).map((row) => row.students).filter(Boolean);
+    return allStudents;
+  }
+
   async function loadProfDashboard() {
     const myContainer = document.getElementById('prof-students-list');
     const allContainer = document.getElementById('prof-all-students-list');
@@ -265,6 +289,7 @@ const App = (() => {
     const [
       linksRes,
       monthReportsRes,
+      monthScheduledRes,
       studentsRes,
       allLinksRes,
     ] = await Promise.all([
@@ -279,6 +304,12 @@ const App = (() => {
         .not('published_at', 'is', null)
         .gte('session_date', firstDayOfMonth()),
       supabase
+        .from('scheduled_sessions')
+        .select('id, student_id, scheduled_at')
+        .eq('teacher_id', profile.id)
+        .gte('scheduled_at', monthStartIso())
+        .lt('scheduled_at', nextMonthStartIso()),
+      supabase
         .from('students')
         .select('id, full_name, level')
         .order('full_name', { ascending: true }),
@@ -289,6 +320,7 @@ const App = (() => {
 
     const links = linksRes.data || [];
     const monthReports = monthReportsRes.data || [];
+    const monthScheduled = monthScheduledRes.data || [];
     const students = studentsRes.data || [];
     const allLinks = allLinksRes.data || [];
 
@@ -311,7 +343,7 @@ const App = (() => {
       const statsEl = document.getElementById('prof-stats');
       statsEl.hidden = false;
       document.getElementById('stat-students').textContent = links.length;
-      document.getElementById('stat-sessions').textContent = monthReports.length || 0;
+      document.getElementById('stat-sessions').textContent = monthScheduled.length || 0;
       const scores = monthReports.filter(r => r.score).map(r => r.score);
       document.getElementById('stat-avg').textContent =
         scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) + '/5' : '—';
@@ -1045,7 +1077,8 @@ const App = (() => {
     }
   }
 
-  function openScheduleModal(studentId, studentName) {
+  async function openScheduleModal(studentId, studentName) {
+    await ensureTeacherStudentsLoaded();
     populateScheduleStudentSelect(studentId || '');
     document.getElementById('sched-student-id').value = studentId;
     document.getElementById('sched-student-name').textContent = studentId
@@ -1107,8 +1140,12 @@ const App = (() => {
       }
 
       closeAllModals();
-      showView('calendar');
-      renderCalendar();
+      showView('sessions');
+      await Promise.all([
+        loadSessionsView(),
+        renderCalendar(),
+        loadProfDashboard(),
+      ]);
     } catch (e) {
       btn.disabled = false;
       btn.textContent = 'Planifier';
@@ -1118,12 +1155,87 @@ const App = (() => {
   }
 
   // ─────────────────────────────────────────
+  //  SESSIONS VIEW (prof)
+  // ─────────────────────────────────────────
+  async function loadSessionsView() {
+    const listEl = document.getElementById('sessions-list');
+    const emptyEl = document.getElementById('sessions-empty');
+    const metaEl = document.getElementById('sessions-meta');
+    const errEl = document.getElementById('sessions-error');
+
+    listEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    emptyEl.hidden = true;
+    errEl.hidden = true;
+    errEl.textContent = '';
+    metaEl.textContent = '';
+
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('scheduled_sessions')
+      .select('id, scheduled_at, subject, notes, student_id, students(full_name)')
+      .eq('teacher_id', profile.id)
+      .gte('scheduled_at', nowIso)
+      .order('scheduled_at', { ascending: true });
+
+    if (error) {
+      listEl.innerHTML = '';
+      errEl.hidden = false;
+      errEl.textContent = `Erreur chargement séances: ${error.message || error.code || 'inconnue'}`;
+      return;
+    }
+
+    const sessions = data || [];
+    metaEl.textContent = `${sessions.length} séance${sessions.length > 1 ? 's' : ''} à venir`;
+
+    if (!sessions.length) {
+      listEl.innerHTML = '';
+      emptyEl.hidden = false;
+      return;
+    }
+
+    listEl.innerHTML = sessions.map((s) => {
+      const dt = new Date(s.scheduled_at);
+      const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
+      const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+      return `
+        <article class="session-item">
+          <div>
+            <h3>${escapeHtml(s.subject || 'Séance')}</h3>
+            <p class="session-meta">${escapeHtml((s.students && s.students.full_name) || 'Élève')} · ${date} · ${time}</p>
+            ${s.notes ? `<p class="session-notes">${escapeHtml(s.notes)}</p>` : ''}
+          </div>
+          <div class="session-actions">
+            <button class="btn btn-sm btn-outline" data-action="open-day" data-date="${s.scheduled_at.split('T')[0]}">Voir agenda</button>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('[data-action="open-day"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const date = btn.dataset.date || '';
+        if (!date) return;
+        const [y, m] = date.split('-').map((n) => Number(n));
+        if (!y || !m) return;
+        calendarYear = y;
+        calendarMonth = m - 1;
+        showView('calendar');
+        await renderCalendar();
+        showDayEvents(date);
+      });
+    });
+  }
+
+  // ─────────────────────────────────────────
   //  CALENDAR (feature R)
   // ─────────────────────────────────────────
   async function renderCalendar() {
     const label = document.getElementById('cal-month-label');
     const grid  = document.getElementById('calendar-grid');
+    const errEl = document.getElementById('calendar-error');
     document.getElementById('calendar-day-events').hidden = true;
+    errEl.hidden = true;
+    errEl.textContent = '';
 
     const monthName = new Date(calendarYear, calendarMonth).toLocaleDateString('fr-BE', { month: 'long', year: 'numeric' });
     label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
@@ -1141,9 +1253,17 @@ const App = (() => {
       supabase.from('scheduled_sessions')
         .select('scheduled_at, subject, student_id, students(full_name)')
         .eq('teacher_id', profile.id)
-        .gte('scheduled_at', start + 'T00:00:00')
-        .lte('scheduled_at', end + 'T23:59:59'),
+        .gte('scheduled_at', monthStartIsoFor(calendarYear, calendarMonth))
+        .lt('scheduled_at', nextMonthStartIsoFor(calendarYear, calendarMonth)),
     ]);
+
+    if (reportsRes.error || schedRes.error) {
+      grid.innerHTML = '';
+      errEl.hidden = false;
+      const details = [reportsRes.error?.message, schedRes.error?.message].filter(Boolean).join(' | ');
+      errEl.textContent = `Impossible de charger l'agenda${details ? `: ${details}` : ''}.`;
+      return;
+    }
 
     calendarEvents = {};
     (reportsRes.data || []).forEach(r => {
@@ -1214,6 +1334,145 @@ const App = (() => {
     }
     panel.hidden = false;
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ─────────────────────────────────────────
+  //  GROUPS VIEW (prof)
+  // ─────────────────────────────────────────
+  async function loadGroupsView() {
+    const listEl = document.getElementById('groups-list');
+    const emptyEl = document.getElementById('groups-empty');
+    const errEl = document.getElementById('groups-error');
+
+    listEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    emptyEl.hidden = true;
+    errEl.hidden = true;
+    errEl.textContent = '';
+
+    await ensureTeacherStudentsLoaded();
+
+    const { data, error } = await supabase
+      .from('groups')
+      .select('*, group_students(student_id, students(id, full_name))')
+      .eq('teacher_id', profile.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      listEl.innerHTML = '';
+      errEl.hidden = false;
+      errEl.textContent = `Erreur chargement groupes: ${error.message || error.code || 'inconnue'}`;
+      return;
+    }
+
+    const groups = data || [];
+    if (!groups.length) {
+      listEl.innerHTML = '';
+      emptyEl.hidden = false;
+      return;
+    }
+
+    listEl.innerHTML = groups.map((g) => {
+      const members = (g.group_students || [])
+        .map((gs) => gs.students)
+        .filter(Boolean);
+      const memberNames = members.map((m) => m.full_name).filter(Boolean);
+      const memberIds = new Set(members.map((m) => m.id));
+      const available = allStudents.filter((s) => !memberIds.has(s.id));
+
+      return `
+        <article class="group-card">
+          <div class="group-card-head">
+            <h3>${escapeHtml(g.name || 'Groupe')}</h3>
+            <span class="teacher-chip">${escapeHtml((g.group_type || 'group') === 'one_to_one' ? '1v1' : 'Groupe')}</span>
+          </div>
+          <p class="group-meta">${escapeHtml((g.level || 'Niveau libre'))}${g.subject ? ` · ${escapeHtml(g.subject)}` : ''}</p>
+          <p class="group-members">${memberNames.length ? `Élèves: ${escapeHtml(memberNames.join(', '))}` : 'Aucun élève dans ce groupe.'}</p>
+          <div class="group-actions">
+            <select data-group-student-select="${g.id}">
+              <option value="">Ajouter un élève</option>
+              ${available.map((s) => `<option value="${s.id}">${escapeHtml(s.full_name || 'Élève')}</option>`).join('')}
+            </select>
+            <button class="btn btn-sm btn-outline" data-action="add-group-student" data-group-id="${g.id}">Ajouter</button>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('[data-action="add-group-student"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupId = btn.dataset.groupId;
+        const select = document.querySelector(`[data-group-student-select="${groupId}"]`);
+        const studentId = select?.value || '';
+        if (!groupId || !studentId) return;
+        await addStudentToGroup(groupId, studentId);
+      });
+    });
+  }
+
+  async function submitCreateGroup() {
+    const name = document.getElementById('group-name').value.trim();
+    const type = document.getElementById('group-type').value;
+    const level = document.getElementById('group-level').value;
+    const subject = document.getElementById('group-subject').value.trim();
+    const btn = document.getElementById('btn-group-create');
+    const errEl = document.getElementById('group-create-error');
+
+    if (!name) {
+      errEl.hidden = false;
+      errEl.textContent = 'Le nom du groupe est requis.';
+      return;
+    }
+
+    errEl.hidden = true;
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    const payload = {
+      name,
+      group_type: type || 'group',
+      level: level || null,
+      subject: subject || null,
+      teacher_id: profile.id,
+      is_active: true,
+    };
+
+    let res = await supabase.from('groups').insert(payload);
+    if (res.error && String(res.error.message || '').toLowerCase().includes('group_type')) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.group_type;
+      res = await supabase.from('groups').insert(fallbackPayload);
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Créer le groupe';
+
+    if (res.error) {
+      errEl.hidden = false;
+      errEl.textContent = `Erreur création groupe: ${res.error.message || 'Réessaie.'}`;
+      return;
+    }
+
+    document.getElementById('group-create-form').reset();
+    await loadGroupsView();
+  }
+
+  async function addStudentToGroup(groupId, studentId) {
+    const errEl = document.getElementById('groups-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
+
+    const { error } = await supabase
+      .from('group_students')
+      .insert({ group_id: groupId, student_id: studentId });
+
+    if (error) {
+      errEl.hidden = false;
+      errEl.textContent = `Erreur ajout élève: ${error.message || 'Réessaie.'}`;
+      return;
+    }
+
+    await loadGroupsView();
   }
 
   // ─────────────────────────────────────────
@@ -1402,6 +1661,24 @@ const App = (() => {
   function firstDayOfMonth() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  function monthStartIso() {
+    const now = new Date();
+    return monthStartIsoFor(now.getFullYear(), now.getMonth());
+  }
+
+  function nextMonthStartIso() {
+    const now = new Date();
+    return nextMonthStartIsoFor(now.getFullYear(), now.getMonth());
+  }
+
+  function monthStartIsoFor(year, monthIndex) {
+    return new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0)).toISOString();
+  }
+
+  function nextMonthStartIsoFor(year, monthIndex) {
+    return new Date(Date.UTC(year, monthIndex + 1, 1, 0, 0, 0)).toISOString();
   }
 
   function formatDate(dateStr) {
