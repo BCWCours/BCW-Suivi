@@ -675,7 +675,7 @@ const App = (() => {
   // ─────────────────────────────────────────
   //  PROF: Open report editor (new or edit)
   // ─────────────────────────────────────────
-  function openReportEditor(studentId, studentName, subjects, existingReport = null) {
+  function openReportEditor(studentId, studentName, subjects, existingReport = null, defaults = null) {
     currentStudentId = studentId;
     currentStudentName = studentName;
     editingReportId = existingReport?.id || null;
@@ -684,11 +684,11 @@ const App = (() => {
     document.getElementById('editor-title').textContent = existingReport ? 'Modifier le rapport' : 'Rédiger un rapport';
     document.getElementById('report-student-info').textContent = studentName;
     document.getElementById('report-edit-id').value = editingReportId || '';
-    document.getElementById('report-date').value     = existingReport?.session_date || new Date().toISOString().split('T')[0];
-    document.getElementById('report-subjects').value  = existingReport?.subjects_covered || subjects || '';
+    document.getElementById('report-date').value     = existingReport?.session_date || defaults?.sessionDate || new Date().toISOString().split('T')[0];
+    document.getElementById('report-subjects').value  = existingReport?.subjects_covered || defaults?.subjects || subjects || '';
     document.getElementById('report-strengths').value = existingReport?.strengths || '';
     document.getElementById('report-improvements').value = existingReport?.improvements || '';
-    document.getElementById('report-resources').value = existingReport?.resources_text || '';
+    document.getElementById('report-resources').value = existingReport?.resources_text || defaults?.prepNotes || '';
     document.getElementById('report-score').value     = existingReport?.score || '';
 
     document.querySelectorAll('.score-btn').forEach(b => {
@@ -698,7 +698,14 @@ const App = (() => {
     const publishBtn = document.getElementById('btn-publish');
     publishBtn.textContent = existingReport?.published_at ? 'Republier' : 'Publier';
 
-    document.getElementById('report-status').hidden = true;
+    const statusEl = document.getElementById('report-status');
+    if (defaults?.fromSessionLabel && !existingReport) {
+      statusEl.textContent = `Prérempli depuis la séance: ${defaults.fromSessionLabel}`;
+      statusEl.className = 'form-status is-success';
+      statusEl.hidden = false;
+    } else {
+      statusEl.hidden = true;
+    }
   }
 
   // ─────────────────────────────────────────
@@ -1353,10 +1360,11 @@ const App = (() => {
           <div>
             <h3>${escapeHtml(s.subject || 'Séance')}</h3>
             <p class="session-meta">${escapeHtml(targetLabel)} · ${date} · ${time}</p>
-            ${s.notes ? `<p class="session-notes">${escapeHtml(s.notes)}</p>` : ''}
+            ${s.notes ? `<p class="session-notes"><strong>Préparation:</strong> ${escapeHtml(s.notes)}</p>` : ''}
           </div>
           <div class="session-actions">
             <button class="btn btn-sm btn-outline" data-action="open-day" data-date="${s.scheduled_at.split('T')[0]}">Voir agenda</button>
+            ${s.student_id ? `<button class="btn btn-sm btn-primary" data-action="create-report-from-session" data-session-id="${s.id}">Créer rapport</button>` : ''}
             <button class="btn btn-sm btn-outline" data-action="delete-session" data-session-id="${s.id}" data-session-label="${escapeHtml(targetLabel)}">Supprimer</button>
             ${isPast ? '<span class="teacher-chip">Passée</span>' : ''}
           </div>
@@ -1390,6 +1398,33 @@ const App = (() => {
         await deleteScheduledSession(btn.dataset.sessionId, btn.dataset.sessionLabel);
       });
     });
+    document.querySelectorAll('[data-action="create-report-from-session"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sessionId = btn.dataset.sessionId;
+        const session = sessions.find((s) => s.id === sessionId);
+        if (!session) return;
+        startReportFromSession(session);
+      });
+    });
+  }
+
+  function startReportFromSession(session) {
+    if (!session?.student_id) return;
+    const dt = new Date(session.scheduled_at);
+    const dateLabel = dt.toLocaleDateString('fr-BE', { day: 'numeric', month: 'long' });
+    const timeLabel = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+    openReportEditor(
+      session.student_id,
+      session.students?.full_name || 'Élève',
+      session.subject || '',
+      null,
+      {
+        sessionDate: session.scheduled_at.split('T')[0],
+        subjects: session.subject || '',
+        prepNotes: session.notes || '',
+        fromSessionLabel: `${dateLabel} ${timeLabel}`,
+      }
+    );
   }
 
   async function deleteScheduledSession(sessionId, sessionLabel) {
