@@ -14,6 +14,7 @@ const Auth = (() => {
   let currentUser = null;
   let currentProfile = null;
   let pendingLoginError = '';
+  let listenersBound = false;
 
   function normalizeRole(role) {
     const raw = String(role || '').trim().toLowerCase();
@@ -60,30 +61,46 @@ const Auth = (() => {
 
   async function init() {
     setupPasswordToggle();
+    bindListenersOnce();
 
     let session = null;
+    if (typeof supabase === 'undefined' || !supabase?.auth) {
+      showLogin();
+      showError('Configuration auth manquante. Recharge la page (Ctrl/Cmd+Shift+R).');
+      return;
+    }
+
     try {
       const { data } = await supabase.auth.getSession();
       session = data.session;
     } catch (e) {
       showLogin();
-      return;
+      showError('Impossible de vérifier la session. Vérifie la connexion puis réessaie.');
     }
 
     if (session) {
       await handleSession(session);
     }
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        await handleSession(session);
-      } else {
-        showLogin();
-      }
-    });
+    try {
+      supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session) {
+          await handleSession(session);
+        } else {
+          showLogin();
+        }
+      });
+    } catch (e) {
+      // Keep manual login usable even if realtime auth listener fails.
+      console.warn('[BCW] onAuthStateChange unavailable:', e);
+    }
+  }
 
-    loginForm.addEventListener('submit', handleLogin);
-    logoutBtn.addEventListener('click', handleLogout);
+  function bindListenersOnce() {
+    if (listenersBound) return;
+    loginForm?.addEventListener('submit', handleLogin);
+    logoutBtn?.addEventListener('click', handleLogout);
+    listenersBound = true;
   }
 
   async function handleLogin(e) {
