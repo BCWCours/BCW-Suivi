@@ -1,9 +1,9 @@
--- BCW Suivi - Fix RLS staff (prof + admin)
--- A coller dans Supabase SQL Editor puis Run
+-- BCW Suivi - RLS RESET (anti-recursion)
+-- Colle ce script complet dans Supabase SQL Editor et Run
 
 begin;
 
--- 1) Autoriser le role admin dans profiles
+-- Roles autorises
 alter table public.profiles
   drop constraint if exists profiles_role_check;
 
@@ -11,7 +11,7 @@ alter table public.profiles
   add constraint profiles_role_check
   check (role in ('prof', 'admin', 'eleve', 'parent'));
 
--- 2) Helper central pour eviter de dupliquer les checks
+-- Helpers securises (sans recursion)
 create or replace function public.is_staff()
 returns boolean
 language sql
@@ -29,7 +29,6 @@ $$;
 
 grant execute on function public.is_staff() to anon, authenticated, service_role;
 
--- Helper parent/enfant pour eviter la recursion RLS
 create or replace function public.is_parent_of_student(p_student_id uuid)
 returns boolean
 language sql
@@ -47,65 +46,103 @@ $$;
 
 grant execute on function public.is_parent_of_student(uuid) to anon, authenticated, service_role;
 
--- 3) Politiques staff (remplace les anciennes version prof-only)
-drop policy if exists "Profs can view all profiles" on public.profiles;
-create policy "Profs can view all profiles"
-  on public.profiles for select
-  using (public.is_staff());
+-- Nettoyage total des policies potentiellement recursees
+do $$
+declare p record;
+begin
+  for p in
+    select policyname
+    from pg_policies
+    where schemaname = 'public' and tablename = 'students'
+  loop
+    execute format('drop policy %I on public.students', p.policyname);
+  end loop;
 
--- IMPORTANT: cette policy cree une recursion quand on lit teacher_students + embed students
-drop policy if exists "Profs can view their students" on public.students;
+  for p in
+    select policyname
+    from pg_policies
+    where schemaname = 'public' and tablename = 'teacher_students'
+  loop
+    execute format('drop policy %I on public.teacher_students', p.policyname);
+  end loop;
 
-drop policy if exists "Profs can view all students" on public.students;
-create policy "Profs can view all students"
+  for p in
+    select policyname
+    from pg_policies
+    where schemaname = 'public' and tablename = 'parent_students'
+  loop
+    execute format('drop policy %I on public.parent_students', p.policyname);
+  end loop;
+end $$;
+
+-- RLS ON
+alter table public.students enable row level security;
+alter table public.teacher_students enable row level security;
+alter table public.parent_students enable row level security;
+
+-- STUDENTS (aucune reference directe a teacher_students ici)
+create policy "Students: staff select"
   on public.students for select
   using (public.is_staff());
 
-drop policy if exists "Parents can view their children" on public.students;
-create policy "Parents can view their children"
+create policy "Students: own select"
+  on public.students for select
+  using (profile_id = auth.uid());
+
+create policy "Students: parent select"
   on public.students for select
   using (public.is_parent_of_student(id));
 
-drop policy if exists "Profs can insert students" on public.students;
-create policy "Profs can insert students"
+create policy "Students: staff insert"
   on public.students for insert
   with check (public.is_staff());
 
-drop policy if exists "Profs can update students" on public.students;
-create policy "Profs can update students"
+create policy "Students: staff update"
   on public.students for update
-  using (public.is_staff());
+  using (public.is_staff())
+  with check (public.is_staff());
 
-drop policy if exists "Profs can view all teacher links" on public.teacher_students;
-create policy "Profs can view all teacher links"
+-- TEACHER_STUDENTS (pas de select croise vers students)
+create policy "TeacherStudents: staff select"
   on public.teacher_students for select
   using (public.is_staff());
 
-drop policy if exists "Profs can manage parent links" on public.parent_students;
-create policy "Profs can manage parent links"
-  on public.parent_students for insert
+create policy "TeacherStudents: staff insert"
+  on public.teacher_students for insert
   with check (public.is_staff());
 
-drop policy if exists "Profs can view parent links" on public.parent_students;
-create policy "Profs can view parent links"
+create policy "TeacherStudents: staff delete"
+  on public.teacher_students for delete
+  using (public.is_staff());
+
+-- PARENT_STUDENTS (pas de recursion)
+create policy "ParentStudents: staff select"
   on public.parent_students for select
   using (public.is_staff());
 
--- 4) Grants explicites pour le front
+create policy "ParentStudents: own select"
+  on public.parent_students for select
+  using (parent_id = auth.uid());
+
+create policy "ParentStudents: staff insert"
+  on public.parent_students for insert
+  with check (public.is_staff());
+
+create policy "ParentStudents: staff delete"
+  on public.parent_students for delete
+  using (public.is_staff());
+
+-- Grants front
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on table public.profiles to authenticated;
 grant select, insert, update, delete on table public.students to authenticated;
 grant select, insert, update, delete on table public.teacher_students to authenticated;
 grant select, insert, update, delete on table public.parent_students to authenticated;
-grant select, insert, update, delete on table public.session_reports to authenticated;
-grant select, insert, update, delete on table public.report_comments to authenticated;
-grant select, insert, update, delete on table public.messages to authenticated;
-grant select, insert, update, delete on table public.scheduled_sessions to authenticated;
 
 commit;
 
--- 5) Verification rapide
-select id, full_name, role
-from public.profiles
-where lower(full_name) like '%bilal%'
-   or lower(full_name) like '%sami%';
+-- Verif rapide: policies actives
+select schemaname, tablename, policyname
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('students', 'teacher_students', 'parent_students')
+order by tablename, policyname;
