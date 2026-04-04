@@ -463,6 +463,9 @@ body {
   margin-top: 14px;
   flex-wrap: wrap;
 }
+.student-card-actions-inline {
+  margin-top: 10px;
+}
 
 /* ========== GROUPS VIEW ========== */
 .groups-grid {

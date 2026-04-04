@@ -212,16 +212,26 @@
           </div>
           <div class="student-home-grid">
             <article class="student-home-card">
+              <h3>Mon prof</h3>
+              <div id="student-home-teacher">Chargement...</div>
+            </article>
+            <article class="student-home-card">
               <h3>Prochaine séance</h3>
               <div id="student-home-next">Chargement...</div>
             </article>
             <article class="student-home-card">
               <h3>Préparation demandée</h3>
               <div id="student-home-prep">Chargement...</div>
+              <div class="student-card-actions-inline">
+                <button id="btn-student-ask-prep" class="btn btn-sm btn-outline" type="button">Poser une question</button>
+              </div>
             </article>
             <article class="student-home-card">
               <h3>Dernier rapport</h3>
               <div id="student-home-last-report">Chargement...</div>
+              <div class="student-card-actions-inline">
+                <button id="btn-student-ask-report" class="btn btn-sm btn-outline" type="button">Question après cours</button>
+              </div>
             </article>
           </div>
           <div class="student-home-actions">
@@ -260,6 +270,7 @@
           <div class="page-header">
             <h2 id="feed-title">Mes rapports</h2>
             <p class="feed-subtitle" id="feed-subtitle"></p>
+            <button id="btn-feed-ask-question" class="btn btn-sm btn-outline" type="button" hidden>Poser une question au prof</button>
           </div>
           <!-- Sélecteur enfant (parents multi-enfants) -->
           <div id="parent-child-selector" class="child-selector" hidden>
@@ -552,8 +563,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260404-12"></script>
-  <script src="js/auth.js?v=20260404-12"></script>
-  <script src="js/app.js?v=20260404-12"></script>
+  <script src="js/config.js?v=20260404-13"></script>
+  <script src="js/auth.js?v=20260404-13"></script>
+  <script src="js/app.js?v=20260404-13"></script>
 </body>
 </html>

@@ -283,6 +283,15 @@ const App = (() => {
       showView('feed');
       await loadViewData('feed', true);
     });
+    document.getElementById('btn-student-ask-prep')?.addEventListener('click', async () => {
+      await openQuestionToTeacher('Bonjour prof, j’ai une question sur la préparation de la prochaine séance.');
+    });
+    document.getElementById('btn-student-ask-report')?.addEventListener('click', async () => {
+      await openQuestionToTeacher('Bonjour prof, j’ai une question après le dernier cours.');
+    });
+    document.getElementById('btn-feed-ask-question')?.addEventListener('click', async () => {
+      await openQuestionToTeacher('Bonjour prof, j’ai une question concernant mes rapports.');
+    });
     eventListenersBound = true;
   }
 
@@ -601,6 +610,7 @@ const App = (() => {
     document.getElementById('feed-subtitle').textContent = '';
     document.getElementById('parent-child-selector').hidden = true;
     document.getElementById('feed-filters').hidden = false;
+    document.getElementById('btn-feed-ask-question').hidden = true;
     showView('feed');
 
     const container = document.getElementById('reports-feed');
@@ -881,19 +891,60 @@ const App = (() => {
     return { data: data || [], error };
   }
 
+  async function getStudentTeacherContacts() {
+    const { data: myStudent } = await supabase
+      .from('students')
+      .select('id')
+      .eq('profile_id', profile.id)
+      .maybeSingle();
+
+    if (!myStudent?.id) return [];
+
+    const { data, error } = await supabase
+      .from('teacher_students')
+      .select('teacher_id, profiles:teacher_id(id, full_name)')
+      .eq('student_id', myStudent.id);
+    if (error) return [];
+
+    const map = new Map();
+    (data || []).forEach((row) => {
+      const id = row.teacher_id || row.profiles?.id;
+      const name = row.profiles?.full_name || 'Prof BCW';
+      if (id && !map.has(id)) map.set(id, { id, name, studentId: myStudent.id });
+    });
+    return [...map.values()];
+  }
+
+  async function openQuestionToTeacher(prefillText) {
+    if (getRole() !== 'eleve') return;
+    const contacts = await getStudentTeacherContacts();
+    if (!contacts.length) return;
+    const contact = contacts[0];
+
+    showView('messages');
+    await loadViewData('messages', true);
+    await openChat(contact.id, contact.name, contact.studentId);
+
+    const input = document.getElementById('chat-input');
+    if (input && !input.value.trim()) input.value = prefillText || '';
+    input?.focus();
+  }
+
   async function loadStudentHome() {
+    const teacherEl = document.getElementById('student-home-teacher');
     const nextEl = document.getElementById('student-home-next');
     const prepEl = document.getElementById('student-home-prep');
     const reportEl = document.getElementById('student-home-last-report');
 
-    if (!nextEl || !prepEl || !reportEl) return;
+    if (!teacherEl || !nextEl || !prepEl || !reportEl) return;
 
+    teacherEl.textContent = 'Chargement...';
     nextEl.textContent = 'Chargement...';
     prepEl.textContent = 'Chargement...';
     reportEl.textContent = 'Chargement...';
 
     const now = new Date();
-    const [sessionsRes, reportRes] = await Promise.all([
+    const [sessionsRes, reportRes, teachers] = await Promise.all([
       getVisibleStudentSessions(),
       supabase
         .from('session_reports')
@@ -902,7 +953,16 @@ const App = (() => {
         .order('session_date', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      getStudentTeacherContacts(),
     ]);
+
+    if (!teachers.length) {
+      teacherEl.textContent = 'Aucun prof assigné pour le moment.';
+    } else {
+      teacherEl.innerHTML = teachers
+        .map((t) => `<span class="teacher-chip">Prof: ${escapeHtml(t.name)}</span>`)
+        .join(' ');
+    }
 
     if (sessionsRes.error) {
       nextEl.textContent = 'Impossible de charger la prochaine séance.';
@@ -994,12 +1054,25 @@ const App = (() => {
             ${s.notes ? `<p class="session-notes"><strong>Préparation:</strong> ${escapeHtml(s.notes)}</p>` : ''}
             <p class="session-meta">Prof: ${escapeHtml(s.profiles?.full_name || '—')}</p>
           </div>
+          <div class="session-actions">
+            <button class="btn btn-sm btn-outline" data-action="ask-session-question" data-subject="${escapeHtml(s.subject || '')}">Poser une question</button>
+          </div>
         </article>
       `;
     };
 
     upcomingEl.innerHTML = upcoming.length ? upcoming.map(renderCard).join('') : '<p class="empty-sub">Aucune séance à venir.</p>';
     pastEl.innerHTML = past.length ? past.map(renderCard).join('') : '<p class="empty-sub">Aucune séance passée.</p>';
+
+    document.querySelectorAll('[data-action="ask-session-question"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const subject = btn.dataset.subject || '';
+        const msg = subject
+          ? `Bonjour prof, j’ai une question sur la séance de ${subject}.`
+          : 'Bonjour prof, j’ai une question sur une séance.';
+        await openQuestionToTeacher(msg);
+      });
+    });
   }
 
   // ─────────────────────────────────────────
@@ -1010,6 +1083,7 @@ const App = (() => {
     document.getElementById('feed-subtitle').textContent = '';
     document.getElementById('parent-child-selector').hidden = true;
     document.getElementById('feed-filters').hidden = false;
+    document.getElementById('btn-feed-ask-question').hidden = false;
     const container = document.getElementById('reports-feed');
     const empty     = document.getElementById('feed-empty');
     container.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
@@ -1047,6 +1121,7 @@ const App = (() => {
     document.getElementById('feed-title').textContent = 'Suivi de votre enfant';
     document.getElementById('parent-child-selector').hidden = true;
     document.getElementById('feed-filters').hidden = false;
+    document.getElementById('btn-feed-ask-question').hidden = true;
     const container = document.getElementById('reports-feed');
     const empty     = document.getElementById('feed-empty');
     container.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
@@ -2009,7 +2084,9 @@ const App = (() => {
           .select('teacher_id, profiles:teacher_id(id, full_name)')
           .eq('student_id', myStudent.id);
         (teachers || []).forEach(t => {
-          if (t.profiles) contacts.push({ id: t.profiles.id, name: t.profiles.full_name, studentId: myStudent.id, studentName: profile.full_name });
+          const id = t.teacher_id || t.profiles?.id;
+          const name = t.profiles?.full_name || 'Prof BCW';
+          if (id) contacts.push({ id, name, studentId: myStudent.id, studentName: profile.full_name });
         });
       }
     } else if (profile.role === 'parent') {
