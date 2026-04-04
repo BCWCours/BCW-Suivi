@@ -295,7 +295,8 @@ const App = (() => {
     const allLinks = allLinksRes.data || [];
 
     if (linksRes.error) {
-      myContainer.innerHTML = '<p class="form-error">Erreur chargement élèves.</p>';
+      console.error('[BCW] loadProfDashboard.linksRes', linksRes.error);
+      myContainer.innerHTML = `<p class="form-error">Erreur chargement élèves: ${escapeHtml(linksRes.error.message || linksRes.error.code || 'inconnue')}</p>`;
       document.getElementById('prof-stats').hidden = true;
     } else if (!links.length) {
       myContainer.innerHTML = `
@@ -356,7 +357,12 @@ const App = (() => {
     }
 
     if (studentsRes.error || allLinksRes.error) {
-      allContainer.innerHTML = '<p class="form-error">Impossible de charger la liste globale des élèves.</p>';
+      console.error('[BCW] loadProfDashboard.studentsRes', studentsRes.error);
+      console.error('[BCW] loadProfDashboard.allLinksRes', allLinksRes.error);
+      const details = [studentsRes.error?.message, allLinksRes.error?.message]
+        .filter(Boolean)
+        .join(' | ');
+      allContainer.innerHTML = `<p class="form-error">Impossible de charger la liste globale des élèves${details ? `: ${escapeHtml(details)}` : ''}.</p>`;
       allMeta.textContent = '';
       return;
     }
