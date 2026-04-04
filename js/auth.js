@@ -43,7 +43,7 @@ const Auth = (() => {
     if (!normalized) return '';
     const digits = normalized.replace(/\D/g, '');
     if (!digits) return '';
-    return `tel_${digits}@auth.bcw.local`;
+    return `tel_${digits}@bcwcours.be`;
   }
 
   function resolveLoginEmail(identifierRaw) {

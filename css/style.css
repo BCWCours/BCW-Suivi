@@ -358,6 +358,18 @@ body {
 .student-card-info h3 { font-size: 1rem; font-weight: 600; color: var(--text); }
 .student-card-info span { font-size: 0.813rem; color: var(--text-muted); display: block; margin-top: 2px; }
 .student-card-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.prof-pool-section { margin-top: 28px; }
+.teacher-chip {
+  display: inline-block;
+  font-size: 0.688rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 6px;
+}
 
 .badge-month {
   display: inline-block;

@@ -252,83 +252,190 @@ const App = (() => {
   //  PROF DASHBOARD (feature E — stats)
   // ─────────────────────────────────────────
   async function loadProfDashboard() {
-    const container = document.getElementById('prof-students-list');
-    container.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    const myContainer = document.getElementById('prof-students-list');
+    const allContainer = document.getElementById('prof-all-students-list');
+    const allMeta = document.getElementById('prof-all-students-meta');
+    const claimFeedback = document.getElementById('prof-claim-feedback');
 
-    const { data: links, error } = await supabase
-      .from('teacher_students')
-      .select('student_id, subjects, students(id, full_name, level)')
-      .eq('teacher_id', profile.id);
+    myContainer.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    allContainer.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    allMeta.textContent = '';
+    claimFeedback.hidden = true;
+    claimFeedback.textContent = '';
+    claimFeedback.classList.remove('is-success', 'is-error');
 
-    if (error || !links || links.length === 0) {
-      container.innerHTML = `
+    const [
+      linksRes,
+      monthReportsRes,
+      studentsRes,
+      allLinksRes,
+    ] = await Promise.all([
+      supabase
+        .from('teacher_students')
+        .select('student_id, subjects, students(id, full_name, level)')
+        .eq('teacher_id', profile.id),
+      supabase
+        .from('session_reports')
+        .select('score, student_id, published_at')
+        .eq('teacher_id', profile.id)
+        .not('published_at', 'is', null)
+        .gte('session_date', firstDayOfMonth()),
+      supabase
+        .from('students')
+        .select('id, full_name, level')
+        .order('full_name', { ascending: true }),
+      supabase
+        .from('teacher_students')
+        .select('student_id, teacher_id, profiles:teacher_id(full_name)')
+    ]);
+
+    const links = linksRes.data || [];
+    const monthReports = monthReportsRes.data || [];
+    const students = studentsRes.data || [];
+    const allLinks = allLinksRes.data || [];
+
+    if (linksRes.error) {
+      myContainer.innerHTML = '<p class="form-error">Erreur chargement élèves.</p>';
+      document.getElementById('prof-stats').hidden = true;
+    } else if (!links.length) {
+      myContainer.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">👩‍🎓</div>
           <p>Aucun élève assigné.</p>
-          <p class="empty-sub">Ajoutez votre premier élève avec le bouton "+ Ajouter".</p>
+          <p class="empty-sub">Prends un élève dans la section "Tous les élèves".</p>
         </div>`;
       document.getElementById('prof-stats').hidden = true;
+      allStudents = [];
+    } else {
+      allStudents = links.map(l => l.students).filter(Boolean);
+
+      const statsEl = document.getElementById('prof-stats');
+      statsEl.hidden = false;
+      document.getElementById('stat-students').textContent = links.length;
+      document.getElementById('stat-sessions').textContent = monthReports.length || 0;
+      const scores = monthReports.filter(r => r.score).map(r => r.score);
+      document.getElementById('stat-avg').textContent =
+        scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) + '/5' : '—';
+
+      myContainer.innerHTML = links.map(link => {
+        const s = link.students;
+        if (!s) return '';
+        const monthCount = monthReports.filter(r => r.student_id === s.id).length;
+        return `
+          <div class="student-card" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}">
+            <div class="student-card-info">
+              <h3>${escapeHtml(s.full_name)}</h3>
+              <span>${s.level === 'secondaire' ? 'Secondaire' : 'Supérieur'}${link.subjects ? ' · ' + escapeHtml(link.subjects) : ''}</span>
+              ${monthCount > 0 ? `<span class="badge-month">${monthCount} séance${monthCount > 1 ? 's' : ''} ce mois</span>` : ''}
+            </div>
+            <div class="student-card-actions">
+              <button class="btn btn-sm btn-outline" data-action="schedule" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}" title="Planifier">📅</button>
+              <button class="btn btn-sm btn-primary" data-action="write" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}" data-subjects="${escapeHtml(link.subjects || '')}">Rédiger</button>
+            </div>
+          </div>`;
+      }).join('');
+
+      myContainer.querySelectorAll('.student-card').forEach(card => {
+        card.addEventListener('click', e => {
+          if (e.target.closest('[data-action]')) return;
+          showStudentReports(card.dataset.studentId, card.dataset.studentName);
+        });
+      });
+      myContainer.querySelectorAll('[data-action="write"]').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          openReportEditor(btn.dataset.studentId, btn.dataset.studentName, btn.dataset.subjects);
+        });
+      });
+      myContainer.querySelectorAll('[data-action="schedule"]').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          openScheduleModal(btn.dataset.studentId, btn.dataset.studentName);
+        });
+      });
+    }
+
+    if (studentsRes.error || allLinksRes.error) {
+      allContainer.innerHTML = '<p class="form-error">Impossible de charger la liste globale des élèves.</p>';
+      allMeta.textContent = '';
       return;
     }
 
-    allStudents = links.map(l => l.students);
+    const linksByStudent = new Map();
+    for (const link of allLinks) {
+      if (!link?.student_id) continue;
+      if (!linksByStudent.has(link.student_id)) linksByStudent.set(link.student_id, []);
+      linksByStudent.get(link.student_id).push({
+        teacherId: link.teacher_id,
+        teacherName: link.profiles?.full_name || 'Prof',
+      });
+    }
 
-    // Load stats (feature E)
-    const { data: monthReports } = await supabase
-      .from('session_reports')
-      .select('score, student_id, published_at')
-      .eq('teacher_id', profile.id)
-      .not('published_at', 'is', null)
-      .gte('session_date', firstDayOfMonth());
+    const unassignedCount = students.filter(s => !linksByStudent.has(s.id)).length;
+    allMeta.textContent = `${students.length} élèves au total · ${unassignedCount} non assigné(s)`;
 
-    const statsEl = document.getElementById('prof-stats');
-    statsEl.hidden = false;
-    document.getElementById('stat-students').textContent = links.length;
-    document.getElementById('stat-sessions').textContent = monthReports?.length || 0;
-    const scores = (monthReports || []).filter(r => r.score).map(r => r.score);
-    document.getElementById('stat-avg').textContent =
-      scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) + '/5' : '—';
+    if (!students.length) {
+      allContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📚</div>
+          <p>Aucun élève dans la base.</p>
+        </div>`;
+      return;
+    }
 
-    // Render student cards
-    container.innerHTML = links.map(link => {
-      const s = link.students;
-      if (!s) return '';
-      const monthCount = (monthReports || []).filter(r => r.student_id === s.id).length;
+    allContainer.innerHTML = students.map((student) => {
+      const assigned = linksByStudent.get(student.id) || [];
+      const mine = assigned.some(a => a.teacherId === profile.id);
+      const teacherNames = [...new Set(assigned.map(a => a.teacherName).filter(Boolean))];
+      const label = assigned.length ? 'Prendre aussi' : 'Prendre';
+
       return `
-        <div class="student-card" data-student-id="${s.id}" data-student-name="${s.full_name}">
+        <div class="student-card">
           <div class="student-card-info">
-            <h3>${s.full_name}</h3>
-            <span>${s.level === 'secondaire' ? 'Secondaire' : 'Supérieur'}${link.subjects ? ' · ' + link.subjects : ''}</span>
-            ${monthCount > 0 ? `<span class="badge-month">${monthCount} séance${monthCount > 1 ? 's' : ''} ce mois</span>` : ''}
+            <h3>${escapeHtml(student.full_name || 'Élève')}</h3>
+            <span>${student.level === 'secondaire' ? 'Secondaire' : 'Supérieur'}</span>
+            <span class="teacher-chip">${teacherNames.length ? 'Assigné: ' + escapeHtml(teacherNames.join(', ')) : 'Non assigné'}</span>
           </div>
           <div class="student-card-actions">
-            <button class="btn btn-sm btn-outline" data-action="schedule" data-student-id="${s.id}" data-student-name="${s.full_name}" title="Planifier">📅</button>
-            <button class="btn btn-sm btn-primary" data-action="write" data-student-id="${s.id}" data-student-name="${s.full_name}" data-subjects="${link.subjects || ''}">Rédiger</button>
+            ${mine
+              ? '<span class="teacher-chip">Déjà à toi</span>'
+              : `<button class="btn btn-sm btn-outline" data-action="claim" data-student-id="${student.id}" data-student-name="${escapeHtml(student.full_name || 'Élève')}">${label}</button>`}
           </div>
-        </div>`;
+        </div>
+      `;
     }).join('');
 
-    // Click on card = view reports
-    container.querySelectorAll('.student-card').forEach(card => {
-      card.addEventListener('click', e => {
-        if (e.target.closest('[data-action]')) return;
-        showStudentReports(card.dataset.studentId, card.dataset.studentName);
+    allContainer.querySelectorAll('[data-action="claim"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await claimStudentForCurrentTeacher(btn.dataset.studentId, btn.dataset.studentName);
       });
     });
-    // Write button
-    container.querySelectorAll('[data-action="write"]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        openReportEditor(btn.dataset.studentId, btn.dataset.studentName, btn.dataset.subjects);
+  }
+
+  async function claimStudentForCurrentTeacher(studentId, studentName) {
+    const feedback = document.getElementById('prof-claim-feedback');
+    const cleanName = studentName || 'Élève';
+    feedback.hidden = false;
+    feedback.classList.remove('is-success', 'is-error');
+    feedback.textContent = `Attribution de ${cleanName}...`;
+
+    const { error } = await supabase
+      .from('teacher_students')
+      .insert({
+        teacher_id: profile.id,
+        student_id: studentId,
+        subjects: null,
       });
-    });
-    // Schedule button
-    container.querySelectorAll('[data-action="schedule"]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        openScheduleModal(btn.dataset.studentId, btn.dataset.studentName);
-      });
-    });
+
+    if (error) {
+      feedback.classList.add('is-error');
+      feedback.textContent = `Impossible d'attribuer ${cleanName}: ${error.message || 'réessaie.'}`;
+      return;
+    }
+
+    feedback.classList.add('is-success');
+    feedback.textContent = `${cleanName} est maintenant assigné à toi.`;
+    await loadProfDashboard();
   }
 
   // ─────────────────────────────────────────

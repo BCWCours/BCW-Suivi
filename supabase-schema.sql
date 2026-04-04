@@ -99,6 +99,13 @@ create policy "Students can view own record"
   on public.students for select
   using (profile_id = auth.uid());
 
+-- STUDENTS: les profs voient tous les eleves (utile pour auto-assignation)
+create policy "Profs can view all students"
+  on public.students for select
+  using (
+    exists (select 1 from public.profiles where id = auth.uid() and role = 'prof')
+  );
+
 -- STUDENTS: les parents voient les fiches de leurs enfants
 create policy "Parents can view their children"
   on public.students for select
@@ -126,6 +133,12 @@ create policy "Profs can update students"
 create policy "Profs can view own links"
   on public.teacher_students for select
   using (teacher_id = auth.uid());
+
+create policy "Profs can view all teacher links"
+  on public.teacher_students for select
+  using (
+    exists (select 1 from public.profiles where id = auth.uid() and role = 'prof')
+  );
 
 create policy "Profs can manage links"
   on public.teacher_students for insert
