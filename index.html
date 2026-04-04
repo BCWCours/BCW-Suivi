@@ -454,8 +454,29 @@
           <input type="time" id="sched-time" required />
         </div>
         <div class="form-group">
-          <label for="sched-subject">Matière / sujet</label>
-          <input type="text" id="sched-subject" placeholder="Ex: Algèbre, grammaire..." />
+          <label for="sched-subject">Matière</label>
+          <select id="sched-subject">
+            <option value="">Choisir une matière (optionnel)</option>
+            <option value="Mathématiques">Mathématiques</option>
+            <option value="Physique">Physique</option>
+            <option value="Chimie">Chimie</option>
+            <option value="Biologie">Biologie</option>
+            <option value="Français">Français</option>
+            <option value="Néerlandais">Néerlandais</option>
+            <option value="Anglais">Anglais</option>
+            <option value="Histoire">Histoire</option>
+            <option value="Géographie">Géographie</option>
+            <option value="Économie">Économie</option>
+            <option value="Informatique">Informatique</option>
+            <option value="Sciences">Sciences</option>
+            <option value="Méthodologie">Méthodologie</option>
+            <option value="Aide aux devoirs">Aide aux devoirs</option>
+            <option value="__other__">Autre (préciser)</option>
+          </select>
+        </div>
+        <div class="form-group" id="sched-subject-other-wrap" hidden>
+          <label for="sched-subject-other">Autre matière</label>
+          <input type="text" id="sched-subject-other" placeholder="Ex: Comptabilité, Latin..." />
         </div>
         <div class="form-group">
           <label for="sched-notes">Préparation / commentaire séance (optionnel)</label>
@@ -472,8 +493,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260404-10"></script>
-  <script src="js/auth.js?v=20260404-10"></script>
-  <script src="js/app.js?v=20260404-10"></script>
+  <script src="js/config.js?v=20260404-11"></script>
+  <script src="js/auth.js?v=20260404-11"></script>
+  <script src="js/app.js?v=20260404-11"></script>
 </body>
 </html>

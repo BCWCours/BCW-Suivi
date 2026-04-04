@@ -229,6 +229,7 @@ const App = (() => {
       openScheduleModal({});
     });
     document.getElementById('sched-target-type')?.addEventListener('change', updateScheduleTargetFields);
+    document.getElementById('sched-subject')?.addEventListener('change', updateScheduleSubjectField);
 
     // Calendar nav
     document.getElementById('cal-prev')?.addEventListener('click', () => {
@@ -1209,6 +1210,15 @@ const App = (() => {
     if (groupWrap) groupWrap.hidden = targetType !== 'group';
   }
 
+  function updateScheduleSubjectField() {
+    const subjectSelect = document.getElementById('sched-subject');
+    const otherWrap = document.getElementById('sched-subject-other-wrap');
+    const otherInput = document.getElementById('sched-subject-other');
+    const isOther = subjectSelect?.value === '__other__';
+    if (otherWrap) otherWrap.hidden = !isOther;
+    if (!isOther && otherInput) otherInput.value = '';
+  }
+
   async function openScheduleModal({ studentId = '', studentName = '', groupId = '' } = {}) {
     await Promise.all([ensureTeacherStudentsLoaded(), ensureTeacherGroupsLoaded()]);
     populateScheduleStudentSelect(studentId || '');
@@ -1229,6 +1239,7 @@ const App = (() => {
       targetTypeSelect.value = groupId ? 'group' : 'student';
     }
     updateScheduleTargetFields();
+    updateScheduleSubjectField();
     document.getElementById('sched-student-id').value = studentId || '';
     if (studentId) {
       const select = document.getElementById('sched-student-select');
@@ -1251,7 +1262,9 @@ const App = (() => {
     const studentId = selectedStudentId || document.getElementById('sched-student-id').value;
     const date      = document.getElementById('sched-date').value;
     const time      = document.getElementById('sched-time').value;
-    const subject   = document.getElementById('sched-subject').value.trim();
+    const subjectRaw = document.getElementById('sched-subject')?.value || '';
+    const subjectOther = (document.getElementById('sched-subject-other')?.value || '').trim();
+    const subject = subjectRaw === '__other__' ? subjectOther : subjectRaw;
     const notes     = document.getElementById('sched-notes').value.trim();
 
     if (targetType === 'student' && !studentId) {
@@ -1267,6 +1280,11 @@ const App = (() => {
 
     if (!date || !time) {
       errEl.textContent = 'Date et heure requises.';
+      errEl.hidden = false;
+      return;
+    }
+    if (subjectRaw === '__other__' && !subject) {
+      errEl.textContent = 'Précise la matière dans "Autre matière".';
       errEl.hidden = false;
       return;
     }
