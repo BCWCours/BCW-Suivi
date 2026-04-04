@@ -73,6 +73,14 @@ create index if not exists idx_scheduled_sessions_teacher_time
 create index if not exists idx_scheduled_sessions_student_time
   on public.scheduled_sessions (student_id, scheduled_at);
 
+create unique index if not exists uq_scheduled_sessions_student_slot
+  on public.scheduled_sessions (teacher_id, student_id, scheduled_at)
+  where student_id is not null;
+
+create unique index if not exists uq_scheduled_sessions_group_slot
+  on public.scheduled_sessions (teacher_id, group_id, scheduled_at)
+  where group_id is not null;
+
 alter table public.scheduled_sessions enable row level security;
 
 do $$

@@ -21,6 +21,10 @@ const App = (() => {
   let currentDetailReport = null;
   let currentFeedStudentId = null;
   let activeView = '';
+  let navBound = false;
+  let eventListenersBound = false;
+  let modalsBound = false;
+  let isSchedulingSubmitInFlight = false;
   const viewLoadedAt = {};
   const viewLoading = {};
   const VIEW_CACHE_MS = 15000;
@@ -99,6 +103,7 @@ const App = (() => {
   //  NAV TABS (feature nav)
   // ─────────────────────────────────────────
   function setupNav() {
+    if (navBound) return;
     const nav = document.getElementById('app-nav');
     nav.hidden = false;
     nav.querySelectorAll('.nav-tab').forEach(tab => {
@@ -122,6 +127,7 @@ const App = (() => {
       showView('messages');
       await loadViewData('messages');
     });
+    navBound = true;
   }
 
   // ─────────────────────────────────────────
@@ -176,6 +182,7 @@ const App = (() => {
   //  EVENT LISTENERS
   // ─────────────────────────────────────────
   function setupEventListeners() {
+    if (eventListenersBound) return;
     // Back buttons
     document.getElementById('btn-back-dashboard')?.addEventListener('click', () => {
       showView('profDashboard');
@@ -261,12 +268,14 @@ const App = (() => {
       e.preventDefault();
       submitCreateGroup();
     });
+    eventListenersBound = true;
   }
 
   // ─────────────────────────────────────────
   //  MODALS
   // ─────────────────────────────────────────
   function setupModals() {
+    if (modalsBound) return;
     const overlay = document.getElementById('modal-overlay');
     overlay.addEventListener('click', e => {
       if (e.target === overlay) closeAllModals();
@@ -282,6 +291,7 @@ const App = (() => {
       e.preventDefault();
       submitScheduleSession();
     });
+    modalsBound = true;
   }
   function openModal(id) {
     document.getElementById('modal-overlay').hidden = false;
@@ -1232,6 +1242,7 @@ const App = (() => {
   }
 
   async function submitScheduleSession() {
+    if (isSchedulingSubmitInFlight) return;
     const btn       = document.getElementById('btn-schedule-submit');
     const errEl     = document.getElementById('schedule-error');
     const targetType = document.getElementById('sched-target-type')?.value || 'student';
@@ -1262,6 +1273,7 @@ const App = (() => {
     errEl.hidden = true;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
+    isSchedulingSubmitInFlight = true;
 
     try {
       const scheduled_at = new Date(date + 'T' + time).toISOString();
@@ -1277,7 +1289,11 @@ const App = (() => {
       btn.disabled = false;
       btn.textContent = 'Planifier';
       if (error) {
-        errEl.textContent = 'Erreur : ' + (error.message || 'Réessayez.');
+        if (error.code === '23505') {
+          errEl.textContent = 'Cette séance est déjà planifiée pour ce créneau.';
+        } else {
+          errEl.textContent = 'Erreur : ' + (error.message || 'Réessayez.');
+        }
         errEl.hidden = false;
         return;
       }
@@ -1294,6 +1310,8 @@ const App = (() => {
       btn.textContent = 'Planifier';
       errEl.textContent = 'Erreur : ' + (e?.message || 'réseau');
       errEl.hidden = false;
+    } finally {
+      isSchedulingSubmitInFlight = false;
     }
   }
 
