@@ -370,6 +370,43 @@ body {
   border-radius: 10px;
   margin-top: 6px;
 }
+.owner-legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 8px 0 12px;
+}
+.owner-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 6px;
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+.owner-dot.owner-bilal { background: #dbeafe; border-color: #93c5fd; }
+.owner-dot.owner-sami { background: #dcfce7; border-color: #86efac; }
+.owner-dot.owner-none { background: #ffffff; border-color: #cbd5e1; }
+
+.student-card.owner-bilal {
+  background: #eef5ff;
+  border: 1px solid #c7ddff;
+}
+.student-card.owner-sami {
+  background: #edfdf2;
+  border: 1px solid #b7efc9;
+}
+.student-card.owner-none {
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+.student-card.owner-mixed {
+  background: linear-gradient(90deg, #eef5ff 0%, #edfdf2 100%);
+  border: 1px solid #b7d8f7;
+}
 
 /* ========== SESSIONS VIEW ========== */
 .sessions-list {

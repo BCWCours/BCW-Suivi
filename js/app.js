@@ -479,10 +479,22 @@ const App = (() => {
       const assigned = linksByStudent.get(student.id) || [];
       const mine = assigned.some(a => a.teacherId === profile.id);
       const teacherNames = [...new Set(assigned.map(a => a.teacherName).filter(Boolean))];
+      const lowered = teacherNames.map((n) => String(n || '').toLowerCase());
+      const hasBilal = lowered.some((n) => n.includes('bilal'));
+      const hasSami = lowered.some((n) => n.includes('sami'));
+      const ownerClass = teacherNames.length === 0
+        ? 'owner-none'
+        : (hasBilal && hasSami)
+          ? 'owner-mixed'
+          : hasBilal
+            ? 'owner-bilal'
+            : hasSami
+              ? 'owner-sami'
+              : 'owner-none';
       const label = assigned.length ? 'Prendre aussi' : 'Prendre';
 
       return `
-        <div class="student-card">
+        <div class="student-card ${ownerClass}">
           <div class="student-card-info">
             <h3>${escapeHtml(student.full_name || 'Élève')}</h3>
             <span>${student.level === 'secondaire' ? 'Secondaire' : 'Supérieur'}</span>
