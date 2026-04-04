@@ -19,6 +19,10 @@ const App = (() => {
   let seenReports = new Set();
   let currentDetailReport = null;
   let currentFeedStudentId = null;
+  let activeView = '';
+  const viewLoadedAt = {};
+  const viewLoading = {};
+  const VIEW_CACHE_MS = 15000;
 
   function getRole() {
     return String(profile?.role || '').trim().toLowerCase();
@@ -55,17 +59,17 @@ const App = (() => {
 
     if (isProfLike()) {
       showView('profDashboard');
-      loadProfDashboard();
+      loadViewData('profDashboard', true);
     } else if (role === 'eleve') {
       showView('feed');
-      loadStudentFeed();
+      loadViewData('feed', true);
     } else if (role === 'parent') {
       showView('feed');
-      loadParentFeed();
+      loadViewData('feed', true);
     } else {
       // Fallback to avoid blank screen when role is unexpected.
       showView('profDashboard');
-      loadProfDashboard();
+      loadViewData('profDashboard', true);
     }
     loadUnreadCount();
   }
@@ -102,42 +106,69 @@ const App = (() => {
       const canSeeTab = roles.includes(role) || (role === 'admin' && roles.includes('prof'));
       if (canSeeTab) {
         tab.hidden = false;
-        tab.addEventListener('click', () => {
+        tab.addEventListener('click', async () => {
           const v = tab.dataset.view;
+          if (activeView === v && isViewFresh(v)) return;
           showView(v);
-          if (v === 'profDashboard') loadProfDashboard();
-          else if (v === 'allReports') loadAllReports();
-          else if (v === 'calendar') renderCalendar();
-          else if (v === 'sessions') loadSessionsView();
-          else if (v === 'groups') loadGroupsView();
-          else if (v === 'feed') {
-            if (role === 'eleve') loadStudentFeed();
-            else if (role === 'parent') loadParentFeed();
-          }
-          else if (v === 'messages') loadMessages();
+          await loadViewData(v);
         });
       }
     });
     // Messages icon topbar
     const msgIcon = document.getElementById('btn-messages-icon');
     msgIcon.hidden = false;
-    msgIcon.addEventListener('click', () => { showView('messages'); loadMessages(); });
+    msgIcon.addEventListener('click', async () => {
+      showView('messages');
+      await loadViewData('messages');
+    });
   }
 
   // ─────────────────────────────────────────
   //  VIEW SWITCHER
   // ─────────────────────────────────────────
   function showView(name) {
+    const previousView = activeView;
     Object.values(views).forEach(v => { if (v) { v.hidden = true; v.classList.remove('active'); } });
     if (views[name]) {
       views[name].hidden = false;
       views[name].classList.add('active');
+    }
+    activeView = name;
+    if (previousView === 'messages' && name !== 'messages' && realtimeChannel) {
+      realtimeChannel.unsubscribe();
+      realtimeChannel = null;
     }
     // Highlight nav tab
     document.querySelectorAll('.nav-tab').forEach(t => {
       t.classList.toggle('active', t.dataset.view === name);
     });
     window.scrollTo(0, 0);
+  }
+
+  function isViewFresh(name) {
+    return Date.now() - (viewLoadedAt[name] || 0) < VIEW_CACHE_MS;
+  }
+
+  async function loadViewData(name, force = false) {
+    if (!force && isViewFresh(name)) return;
+    if (viewLoading[name]) return;
+    viewLoading[name] = true;
+    try {
+      const role = getRole();
+      if (name === 'profDashboard') await loadProfDashboard();
+      else if (name === 'allReports') await loadAllReports();
+      else if (name === 'calendar') await renderCalendar();
+      else if (name === 'sessions') await loadSessionsView();
+      else if (name === 'groups') await loadGroupsView();
+      else if (name === 'messages') await loadMessages();
+      else if (name === 'feed') {
+        if (role === 'eleve') await loadStudentFeed();
+        else if (role === 'parent') await loadParentFeed();
+      }
+      viewLoadedAt[name] = Date.now();
+    } finally {
+      viewLoading[name] = false;
+    }
   }
 
   // ─────────────────────────────────────────
@@ -324,6 +355,10 @@ const App = (() => {
     const students = studentsRes.data || [];
     const allLinks = allLinksRes.data || [];
 
+    if (monthScheduledRes.error) {
+      console.error('[BCW] loadProfDashboard.monthScheduledRes', monthScheduledRes.error);
+    }
+
     if (linksRes.error) {
       console.error('[BCW] loadProfDashboard.linksRes', linksRes.error);
       myContainer.innerHTML = `<p class="form-error">Erreur chargement élèves: ${escapeHtml(linksRes.error.message || linksRes.error.code || 'inconnue')}</p>`;
@@ -351,7 +386,7 @@ const App = (() => {
       myContainer.innerHTML = links.map(link => {
         const s = link.students;
         if (!s) return '';
-        const monthCount = monthReports.filter(r => r.student_id === s.id).length;
+        const monthCount = monthScheduled.filter(r => r.student_id === s.id).length;
         return `
           <div class="student-card" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}">
             <div class="student-card-info">
@@ -362,6 +397,7 @@ const App = (() => {
             <div class="student-card-actions">
               <button class="btn btn-sm btn-outline" data-action="schedule" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}" title="Planifier">📅</button>
               <button class="btn btn-sm btn-primary" data-action="write" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}" data-subjects="${escapeHtml(link.subjects || '')}">Rédiger</button>
+              <button class="btn btn-sm btn-outline" data-action="unassign" data-student-id="${s.id}" data-student-name="${escapeHtml(s.full_name)}">Retirer</button>
             </div>
           </div>`;
       }).join('');
@@ -382,6 +418,12 @@ const App = (() => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
           openScheduleModal(btn.dataset.studentId, btn.dataset.studentName);
+        });
+      });
+      myContainer.querySelectorAll('[data-action="unassign"]').forEach(btn => {
+        btn.addEventListener('click', async e => {
+          e.stopPropagation();
+          await unassignStudentForCurrentTeacher(btn.dataset.studentId, btn.dataset.studentName);
         });
       });
     }
@@ -472,6 +514,31 @@ const App = (() => {
     feedback.classList.add('is-success');
     feedback.textContent = `${cleanName} est maintenant assigné à toi.`;
     await loadProfDashboard();
+  }
+
+  async function unassignStudentForCurrentTeacher(studentId, studentName) {
+    const feedback = document.getElementById('prof-claim-feedback');
+    const cleanName = studentName || 'Élève';
+    feedback.hidden = false;
+    feedback.classList.remove('is-success', 'is-error');
+    feedback.textContent = `Retrait de ${cleanName}...`;
+
+    const { error } = await supabase
+      .from('teacher_students')
+      .delete()
+      .eq('teacher_id', profile.id)
+      .eq('student_id', studentId);
+
+    if (error) {
+      feedback.classList.add('is-error');
+      feedback.textContent = `Impossible de retirer ${cleanName}: ${error.message || 'réessaie.'}`;
+      return;
+    }
+
+    feedback.classList.add('is-success');
+    feedback.textContent = `${cleanName} n'est plus assigné à toi.`;
+    allStudents = allStudents.filter((s) => s.id !== studentId);
+    await Promise.all([loadProfDashboard(), loadGroupsView()]);
   }
 
   // ─────────────────────────────────────────
@@ -1158,42 +1225,54 @@ const App = (() => {
   //  SESSIONS VIEW (prof)
   // ─────────────────────────────────────────
   async function loadSessionsView() {
-    const listEl = document.getElementById('sessions-list');
+    const listUpcomingEl = document.getElementById('sessions-list-upcoming');
+    const listPastEl = document.getElementById('sessions-list-past');
     const emptyEl = document.getElementById('sessions-empty');
     const metaEl = document.getElementById('sessions-meta');
     const errEl = document.getElementById('sessions-error');
 
-    listEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    listUpcomingEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    listPastEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
     emptyEl.hidden = true;
     errEl.hidden = true;
     errEl.textContent = '';
     metaEl.textContent = '';
 
-    const nowIso = new Date().toISOString();
     const { data, error } = await supabase
       .from('scheduled_sessions')
       .select('id, scheduled_at, subject, notes, student_id, students(full_name)')
       .eq('teacher_id', profile.id)
-      .gte('scheduled_at', nowIso)
-      .order('scheduled_at', { ascending: true });
+      .order('scheduled_at', { ascending: false });
 
     if (error) {
-      listEl.innerHTML = '';
+      listUpcomingEl.innerHTML = '';
+      listPastEl.innerHTML = '';
       errEl.hidden = false;
       errEl.textContent = `Erreur chargement séances: ${error.message || error.code || 'inconnue'}`;
       return;
     }
 
     const sessions = data || [];
-    metaEl.textContent = `${sessions.length} séance${sessions.length > 1 ? 's' : ''} à venir`;
+    const now = new Date();
+    const upcoming = [];
+    const past = [];
+    sessions.forEach((s) => {
+      if (new Date(s.scheduled_at) >= now) upcoming.push(s);
+      else past.push(s);
+    });
+    upcoming.sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+    past.sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
+
+    metaEl.textContent = `${upcoming.length} à venir · ${past.length} passée${past.length > 1 ? 's' : ''}`;
 
     if (!sessions.length) {
-      listEl.innerHTML = '';
+      listUpcomingEl.innerHTML = '';
+      listPastEl.innerHTML = '';
       emptyEl.hidden = false;
       return;
     }
 
-    listEl.innerHTML = sessions.map((s) => {
+    const renderSessionCard = (s, isPast = false) => {
       const dt = new Date(s.scheduled_at);
       const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
       const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
@@ -1206,12 +1285,21 @@ const App = (() => {
           </div>
           <div class="session-actions">
             <button class="btn btn-sm btn-outline" data-action="open-day" data-date="${s.scheduled_at.split('T')[0]}">Voir agenda</button>
+            <button class="btn btn-sm btn-outline" data-action="delete-session" data-session-id="${s.id}" data-session-label="${escapeHtml((s.students && s.students.full_name) || 'séance')}">Supprimer</button>
+            ${isPast ? '<span class="teacher-chip">Passée</span>' : ''}
           </div>
         </article>
       `;
-    }).join('');
+    };
 
-    listEl.querySelectorAll('[data-action="open-day"]').forEach((btn) => {
+    listUpcomingEl.innerHTML = upcoming.length
+      ? upcoming.map((s) => renderSessionCard(s, false)).join('')
+      : '<p class="empty-sub">Aucune séance à venir.</p>';
+    listPastEl.innerHTML = past.length
+      ? past.map((s) => renderSessionCard(s, true)).join('')
+      : '<p class="empty-sub">Aucune séance passée.</p>';
+
+    document.querySelectorAll('[data-action="open-day"]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const date = btn.dataset.date || '';
         if (!date) return;
@@ -1224,6 +1312,33 @@ const App = (() => {
         showDayEvents(date);
       });
     });
+
+    document.querySelectorAll('[data-action="delete-session"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await deleteScheduledSession(btn.dataset.sessionId, btn.dataset.sessionLabel);
+      });
+    });
+  }
+
+  async function deleteScheduledSession(sessionId, sessionLabel) {
+    if (!sessionId) return;
+    const errEl = document.getElementById('sessions-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
+
+    const { error } = await supabase
+      .from('scheduled_sessions')
+      .delete()
+      .eq('id', sessionId)
+      .eq('teacher_id', profile.id);
+
+    if (error) {
+      errEl.hidden = false;
+      errEl.textContent = `Impossible de supprimer ${sessionLabel || 'la séance'}: ${error.message || 'réessaie.'}`;
+      return;
+    }
+
+    await Promise.all([loadSessionsView(), renderCalendar(), loadProfDashboard()]);
   }
 
   // ─────────────────────────────────────────
@@ -1375,7 +1490,6 @@ const App = (() => {
       const members = (g.group_students || [])
         .map((gs) => gs.students)
         .filter(Boolean);
-      const memberNames = members.map((m) => m.full_name).filter(Boolean);
       const memberIds = new Set(members.map((m) => m.id));
       const available = allStudents.filter((s) => !memberIds.has(s.id));
 
@@ -1383,10 +1497,19 @@ const App = (() => {
         <article class="group-card">
           <div class="group-card-head">
             <h3>${escapeHtml(g.name || 'Groupe')}</h3>
-            <span class="teacher-chip">${escapeHtml((g.group_type || 'group') === 'one_to_one' ? '1v1' : 'Groupe')}</span>
+            <button class="btn btn-sm btn-outline" data-action="delete-group" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name || 'Groupe')}">Supprimer</button>
           </div>
           <p class="group-meta">${escapeHtml((g.level || 'Niveau libre'))}${g.subject ? ` · ${escapeHtml(g.subject)}` : ''}</p>
-          <p class="group-members">${memberNames.length ? `Élèves: ${escapeHtml(memberNames.join(', '))}` : 'Aucun élève dans ce groupe.'}</p>
+          <div class="group-members">
+            ${members.length
+              ? members.map((m) => `
+                <div class="group-member-row">
+                  <span>${escapeHtml(m.full_name || 'Élève')}</span>
+                  <button class="btn btn-sm btn-outline" data-action="remove-group-student" data-group-id="${g.id}" data-student-id="${m.id}">Retirer</button>
+                </div>
+              `).join('')
+              : 'Aucun élève dans ce groupe.'}
+          </div>
           <div class="group-actions">
             <select data-group-student-select="${g.id}">
               <option value="">Ajouter un élève</option>
@@ -1407,11 +1530,20 @@ const App = (() => {
         await addStudentToGroup(groupId, studentId);
       });
     });
+    listEl.querySelectorAll('[data-action="remove-group-student"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await removeStudentFromGroup(btn.dataset.groupId, btn.dataset.studentId);
+      });
+    });
+    listEl.querySelectorAll('[data-action="delete-group"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await deleteGroup(btn.dataset.groupId, btn.dataset.groupName);
+      });
+    });
   }
 
   async function submitCreateGroup() {
     const name = document.getElementById('group-name').value.trim();
-    const type = document.getElementById('group-type').value;
     const level = document.getElementById('group-level').value;
     const subject = document.getElementById('group-subject').value.trim();
     const btn = document.getElementById('btn-group-create');
@@ -1430,19 +1562,13 @@ const App = (() => {
 
     const payload = {
       name,
-      group_type: type || 'group',
       level: level || null,
       subject: subject || null,
       teacher_id: profile.id,
       is_active: true,
     };
 
-    let res = await supabase.from('groups').insert(payload);
-    if (res.error && String(res.error.message || '').toLowerCase().includes('group_type')) {
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.group_type;
-      res = await supabase.from('groups').insert(fallbackPayload);
-    }
+    const res = await supabase.from('groups').insert(payload);
 
     btn.disabled = false;
     btn.textContent = 'Créer le groupe';
@@ -1469,6 +1595,46 @@ const App = (() => {
     if (error) {
       errEl.hidden = false;
       errEl.textContent = `Erreur ajout élève: ${error.message || 'Réessaie.'}`;
+      return;
+    }
+
+    await loadGroupsView();
+  }
+
+  async function removeStudentFromGroup(groupId, studentId) {
+    const errEl = document.getElementById('groups-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
+
+    const { error } = await supabase
+      .from('group_students')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('student_id', studentId);
+
+    if (error) {
+      errEl.hidden = false;
+      errEl.textContent = `Erreur retrait élève: ${error.message || 'Réessaie.'}`;
+      return;
+    }
+
+    await loadGroupsView();
+  }
+
+  async function deleteGroup(groupId, groupName) {
+    const errEl = document.getElementById('groups-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
+
+    const { error } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', groupId)
+      .eq('teacher_id', profile.id);
+
+    if (error) {
+      errEl.hidden = false;
+      errEl.textContent = `Erreur suppression groupe ${groupName || ''}: ${error.message || 'Réessaie.'}`;
       return;
     }
 

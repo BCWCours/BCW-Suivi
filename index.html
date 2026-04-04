@@ -273,7 +273,14 @@
             <button id="btn-schedule-session-2" class="btn btn-primary btn-sm" type="button">+ Planifier</button>
           </div>
           <p id="sessions-meta" class="feed-subtitle"></p>
-          <div id="sessions-list" class="sessions-list"></div>
+          <section class="sessions-block">
+            <h3 class="section-subtitle">À venir</h3>
+            <div id="sessions-list-upcoming" class="sessions-list"></div>
+          </section>
+          <section class="sessions-block">
+            <h3 class="section-subtitle">Passées</h3>
+            <div id="sessions-list-past" class="sessions-list"></div>
+          </section>
           <div id="sessions-empty" class="empty-state" hidden>
             <div class="empty-icon">📅</div>
             <p>Aucune séance planifiée.</p>
@@ -293,13 +300,6 @@
             <div class="form-group">
               <label for="group-name">Nom du groupe</label>
               <input type="text" id="group-name" required placeholder="Ex: Aide devoirs S4 mercredi" />
-            </div>
-            <div class="form-group">
-              <label for="group-type">Type</label>
-              <select id="group-type">
-                <option value="group">Groupe</option>
-                <option value="one_to_one">1v1</option>
-              </select>
             </div>
             <div class="form-group">
               <label for="group-level">Niveau</label>
@@ -454,8 +454,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260404-5"></script>
-  <script src="js/auth.js?v=20260404-5"></script>
-  <script src="js/app.js?v=20260404-5"></script>
+  <script src="js/config.js?v=20260404-6"></script>
+  <script src="js/auth.js?v=20260404-6"></script>
+  <script src="js/app.js?v=20260404-6"></script>
 </body>
 </html>

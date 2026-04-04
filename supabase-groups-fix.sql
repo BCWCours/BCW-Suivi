@@ -40,7 +40,7 @@ grant execute on function public.is_parent_of_student(uuid) to anon, authenticat
 create table if not exists public.groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  group_type text not null default 'group' check (group_type in ('group', 'one_to_one')),
+  group_type text not null default 'group' check (group_type in ('group')),
   level text,
   subject text,
   teacher_id uuid not null references public.profiles(id) on delete cascade,
@@ -54,22 +54,15 @@ alter table public.groups add column if not exists created_at timestamptz;
 alter table public.groups alter column group_type set default 'group';
 alter table public.groups alter column is_active set default true;
 alter table public.groups alter column created_at set default now();
-update public.groups set group_type = coalesce(group_type, 'group');
+update public.groups set group_type = 'group';
 update public.groups set is_active = coalesce(is_active, true);
 update public.groups set created_at = coalesce(created_at, now());
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'groups_group_type_check'
-      and conrelid = 'public.groups'::regclass
-  ) then
-    alter table public.groups
-      add constraint groups_group_type_check check (group_type in ('group', 'one_to_one'));
-  end if;
-end $$;
+alter table public.groups
+  drop constraint if exists groups_group_type_check;
+
+alter table public.groups
+  add constraint groups_group_type_check check (group_type in ('group'));
 
 create table if not exists public.group_students (
   group_id uuid not null references public.groups(id) on delete cascade,

@@ -409,6 +409,15 @@ body {
   display: grid;
   gap: 12px;
 }
+.section-subtitle {
+  font-size: 0.938rem;
+  color: var(--text-secondary);
+  margin: 6px 0 10px;
+  font-weight: 700;
+}
+.sessions-block {
+  margin-bottom: 18px;
+}
 .group-card {
   background: var(--card);
   border-radius: var(--radius);
@@ -434,6 +443,13 @@ body {
   font-size: 0.813rem;
   color: var(--text-muted);
   margin-top: 8px;
+}
+.group-member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
 }
 .group-actions {
   margin-top: 10px;
