@@ -215,18 +215,20 @@ const Auth = (() => {
   }
 
   function showLogin() {
+    const hadVisibleError = !loginError.hidden && String(loginError.textContent || '').trim().length > 0;
     currentUser = null;
     currentProfile = null;
     loginView.classList.add('active');
     appShell.hidden = true;
     loginBtn.disabled = false;
     loginBtn.textContent = 'Se connecter';
-    loginForm.reset();
+    // Keep form values when an error is visible so the user can correct quickly.
+    if (!hadVisibleError) loginForm.reset();
     if (pendingLoginError) {
       const msg = pendingLoginError;
       pendingLoginError = '';
       showError(msg);
-    } else {
+    } else if (!hadVisibleError) {
       loginError.hidden = true;
       loginError.textContent = '';
     }
