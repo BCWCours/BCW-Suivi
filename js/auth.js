@@ -13,6 +13,7 @@ const Auth = (() => {
 
   let currentUser = null;
   let currentProfile = null;
+  let pendingLoginError = '';
 
   function normalizeRole(role) {
     const raw = String(role || '').trim().toLowerCase();
@@ -152,16 +153,16 @@ const Auth = (() => {
         const msg = error?.code === 'PGRST116'
           ? 'Profil introuvable. Contactez Bilal.'
           : `Erreur profil (${error?.code || 'inconnue'}) : ${error?.message || ''}`;
+        pendingLoginError = msg;
         await supabase.auth.signOut();
-        setTimeout(() => showError(msg), 80);
         return;
       }
       profile = data;
       profile.role = normalizeRole(profile.role);
     } catch (e) {
       console.error('[BCW] étape 1 exception:', e);
+      pendingLoginError = `Étape 1 – ${e?.message || 'Erreur réseau'}`;
       await supabase.auth.signOut();
-      setTimeout(() => showError(`Étape 1 – ${e?.message || 'Erreur réseau'}`), 80);
       return;
     }
 
@@ -187,8 +188,8 @@ const Auth = (() => {
       showApp();
     } catch (e) {
       console.error('[BCW] étape 3 (showApp) exception:', e);
+      pendingLoginError = `Étape 3 – ${e?.message || 'Erreur affichage'}`;
       await supabase.auth.signOut();
-      setTimeout(() => showError(`Étape 3 – ${e?.message || 'Erreur affichage'}`), 80);
     }
   }
 
@@ -221,7 +222,14 @@ const Auth = (() => {
     loginBtn.disabled = false;
     loginBtn.textContent = 'Se connecter';
     loginForm.reset();
-    loginError.hidden = true;
+    if (pendingLoginError) {
+      const msg = pendingLoginError;
+      pendingLoginError = '';
+      showError(msg);
+    } else {
+      loginError.hidden = true;
+      loginError.textContent = '';
+    }
   }
 
   function showApp() {
