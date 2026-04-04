@@ -97,14 +97,31 @@ const Auth = (() => {
     const email = resolveLoginEmail(identifier);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const timeoutMs = 15000;
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('timeout')), timeoutMs);
+      });
+      const signInPromise = supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
 
       if (error) {
         showLoginError(error);
         return;
       }
+
+      // Defensive path: some environments delay/skip auth state callback.
+      if (data?.session) {
+        await handleSession(data.session);
+        return;
+      }
+
+      showError('Connexion établie mais session introuvable. Réessaie.');
     } catch (e) {
-      showError('Erreur réseau. Vérifiez votre connexion internet.');
+      if (String(e?.message || '').toLowerCase().includes('timeout')) {
+        showError('Connexion trop longue. Vérifie internet puis réessaie.');
+      } else {
+        showError('Erreur réseau. Vérifiez votre connexion internet.');
+      }
       return;
     }
   }
