@@ -41,6 +41,8 @@ const App = (() => {
   const views = {
     profDashboard: document.getElementById('view-prof-dashboard'),
     reportEditor:  document.getElementById('view-report-editor'),
+    studentHome:   document.getElementById('view-student-home'),
+    studentSessions: document.getElementById('view-student-sessions'),
     feed:          document.getElementById('view-feed'),
     reportDetail:  document.getElementById('view-report-detail'),
     allReports:    document.getElementById('view-all-reports'),
@@ -66,8 +68,8 @@ const App = (() => {
       showView('profDashboard');
       loadViewData('profDashboard', true);
     } else if (role === 'eleve') {
-      showView('feed');
-      loadViewData('feed', true);
+      showView('studentHome');
+      loadViewData('studentHome', true);
     } else if (role === 'parent') {
       showView('feed');
       loadViewData('feed', true);
@@ -163,6 +165,8 @@ const App = (() => {
     try {
       const role = getRole();
       if (name === 'profDashboard') await loadProfDashboard();
+      else if (name === 'studentHome') await loadStudentHome();
+      else if (name === 'studentSessions') await loadStudentSessions();
       else if (name === 'allReports') await loadAllReports();
       else if (name === 'calendar') await renderCalendar();
       else if (name === 'sessions') await loadSessionsView();
@@ -268,6 +272,16 @@ const App = (() => {
     document.getElementById('group-create-form')?.addEventListener('submit', e => {
       e.preventDefault();
       submitCreateGroup();
+    });
+
+    // Student quick actions
+    document.getElementById('btn-student-go-sessions')?.addEventListener('click', async () => {
+      showView('studentSessions');
+      await loadViewData('studentSessions', true);
+    });
+    document.getElementById('btn-student-go-reports')?.addEventListener('click', async () => {
+      showView('feed');
+      await loadViewData('feed', true);
     });
     eventListenersBound = true;
   }
@@ -857,6 +871,138 @@ const App = (() => {
   }
 
   // ─────────────────────────────────────────
+  //  ÉLÈVE: Accueil + Séances
+  // ─────────────────────────────────────────
+  async function getVisibleStudentSessions() {
+    const { data, error } = await supabase
+      .from('scheduled_sessions')
+      .select('id, scheduled_at, subject, notes, student_id, group_id, groups(name), profiles:teacher_id(full_name)')
+      .order('scheduled_at', { ascending: false });
+    return { data: data || [], error };
+  }
+
+  async function loadStudentHome() {
+    const nextEl = document.getElementById('student-home-next');
+    const prepEl = document.getElementById('student-home-prep');
+    const reportEl = document.getElementById('student-home-last-report');
+
+    if (!nextEl || !prepEl || !reportEl) return;
+
+    nextEl.textContent = 'Chargement...';
+    prepEl.textContent = 'Chargement...';
+    reportEl.textContent = 'Chargement...';
+
+    const now = new Date();
+    const [sessionsRes, reportRes] = await Promise.all([
+      getVisibleStudentSessions(),
+      supabase
+        .from('session_reports')
+        .select('id, session_date, subjects_covered, score, profiles:teacher_id(full_name)')
+        .not('published_at', 'is', null)
+        .order('session_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (sessionsRes.error) {
+      nextEl.textContent = 'Impossible de charger la prochaine séance.';
+      prepEl.textContent = 'Impossible de charger la préparation.';
+    } else {
+      const sessions = sessionsRes.data || [];
+      const upcoming = sessions
+        .filter((s) => new Date(s.scheduled_at) >= now)
+        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+      const next = upcoming[0];
+
+      if (next) {
+        const dt = new Date(next.scheduled_at);
+        const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
+        const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+        const target = next.group_id ? `Groupe ${next.groups?.name || ''}` : 'Cours individuel';
+        nextEl.innerHTML = `<strong>${date}</strong><br>${time}${next.subject ? ` · ${escapeHtml(next.subject)}` : ''}<br>${escapeHtml(target.trim())}`;
+        prepEl.textContent = next.notes?.trim() || 'Aucune préparation demandée pour le moment.';
+      } else {
+        nextEl.textContent = 'Aucune séance à venir.';
+        prepEl.textContent = 'Pas de préparation en attente.';
+      }
+    }
+
+    if (reportRes.error) {
+      reportEl.textContent = 'Impossible de charger le dernier rapport.';
+    } else if (!reportRes.data) {
+      reportEl.textContent = 'Aucun rapport publié pour le moment.';
+    } else {
+      const r = reportRes.data;
+      const d = new Date(r.session_date + 'T00:00:00');
+      const date = d.toLocaleDateString('fr-BE', { day: 'numeric', month: 'long' });
+      const score = r.score ? ` · ${r.score}/5` : '';
+      reportEl.innerHTML = `<strong>${escapeHtml(r.subjects_covered || 'Rapport')}</strong><br>${date}${score}<br>${escapeHtml(r.profiles?.full_name || '')}`;
+    }
+  }
+
+  async function loadStudentSessions() {
+    const upcomingEl = document.getElementById('student-sessions-upcoming');
+    const pastEl = document.getElementById('student-sessions-past');
+    const metaEl = document.getElementById('student-sessions-meta');
+    const emptyEl = document.getElementById('student-sessions-empty');
+    const errEl = document.getElementById('student-sessions-error');
+    if (!upcomingEl || !pastEl || !metaEl || !emptyEl || !errEl) return;
+
+    upcomingEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    pastEl.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
+    metaEl.textContent = '';
+    emptyEl.hidden = true;
+    errEl.hidden = true;
+    errEl.textContent = '';
+
+    const { data, error } = await getVisibleStudentSessions();
+    if (error) {
+      upcomingEl.innerHTML = '';
+      pastEl.innerHTML = '';
+      errEl.hidden = false;
+      errEl.textContent = `Erreur chargement séances: ${error.message || error.code || 'inconnue'}`;
+      return;
+    }
+
+    const now = new Date();
+    const sessions = data || [];
+    const upcoming = sessions
+      .filter((s) => new Date(s.scheduled_at) >= now)
+      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+    const past = sessions
+      .filter((s) => new Date(s.scheduled_at) < now)
+      .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at));
+
+    metaEl.textContent = `${upcoming.length} à venir · ${past.length} passée${past.length > 1 ? 's' : ''}`;
+    if (!sessions.length) {
+      upcomingEl.innerHTML = '';
+      pastEl.innerHTML = '';
+      emptyEl.hidden = false;
+      return;
+    }
+
+    const renderCard = (s) => {
+      const dt = new Date(s.scheduled_at);
+      const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
+      const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+      const mode = s.group_id ? 'Groupe' : 'Individuel';
+      return `
+        <article class="session-item">
+          <div>
+            <h3>${escapeHtml(s.subject || 'Séance')}</h3>
+            <p class="session-meta">${date} · ${time} · ${mode}</p>
+            ${s.notes ? `<p class="session-notes"><strong>Préparation:</strong> ${escapeHtml(s.notes)}</p>` : ''}
+            <p class="session-meta">Prof: ${escapeHtml(s.profiles?.full_name || '—')}</p>
+          </div>
+        </article>
+      `;
+    };
+
+    upcomingEl.innerHTML = upcoming.length ? upcoming.map(renderCard).join('') : '<p class="empty-sub">Aucune séance à venir.</p>';
+    pastEl.innerHTML = past.length ? past.map(renderCard).join('') : '<p class="empty-sub">Aucune séance passée.</p>';
+  }
+
+  // ─────────────────────────────────────────
   //  ÉLÈVE: Feed
   // ─────────────────────────────────────────
   async function loadStudentFeed() {
@@ -880,7 +1026,7 @@ const App = (() => {
     currentFeedStudentId = student.id;
 
     // Prochaine séance
-    loadNextSession(student.id);
+    loadNextSession();
 
     const { data: reports, error } = await supabase
       .from('session_reports')
@@ -953,15 +1099,28 @@ const App = (() => {
   // ─────────────────────────────────────────
   //  NEXT SESSION (feature Q — view)
   // ─────────────────────────────────────────
-  async function loadNextSession(studentId) {
-    const { data } = await supabase
-      .from('scheduled_sessions')
-      .select('*')
-      .eq('student_id', studentId)
-      .gte('scheduled_at', new Date().toISOString())
-      .order('scheduled_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+  async function loadNextSession(studentId = null) {
+    let data = null;
+    if (studentId) {
+      const res = await supabase
+        .from('scheduled_sessions')
+        .select('*')
+        .eq('student_id', studentId)
+        .gte('scheduled_at', new Date().toISOString())
+        .order('scheduled_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      data = res.data;
+    } else {
+      const res = await supabase
+        .from('scheduled_sessions')
+        .select('*')
+        .gte('scheduled_at', new Date().toISOString())
+        .order('scheduled_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      data = res.data;
+    }
 
     const summaryEl = document.getElementById('monthly-summary');
     if (data) {

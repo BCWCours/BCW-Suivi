@@ -441,6 +441,29 @@ body {
   flex-shrink: 0;
 }
 
+/* ========== STUDENT HOME ========== */
+.student-home-grid {
+  display: grid;
+  gap: 12px;
+}
+.student-home-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.student-home-card h3 {
+  font-size: 0.938rem;
+  color: var(--navy-dark);
+  margin-bottom: 8px;
+}
+.student-home-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
 /* ========== GROUPS VIEW ========== */
 .groups-grid {
   display: grid;
@@ -1006,6 +1029,7 @@ body {
   .session-item { flex-direction: column; }
   .session-actions { align-self: flex-end; }
   .group-actions { flex-direction: column; align-items: stretch; }
+  .student-home-actions .btn { width: 100%; }
 }
 @media (max-width: 480px) {
   .login-form  { padding: 24px 20px; }
