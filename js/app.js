@@ -180,9 +180,7 @@ const App = (() => {
     // Prof dashboard buttons
     document.getElementById('btn-add-student')?.addEventListener('click', () => openModal('modal-add-student'));
     document.getElementById('btn-schedule-session')?.addEventListener('click', () => {
-      document.getElementById('sched-student-id').value = '';
-      document.getElementById('sched-student-name').textContent = 'Choisissez un élève depuis le dashboard';
-      openModal('modal-schedule');
+      openScheduleModal('', '');
     });
 
     // Calendar nav
@@ -1033,23 +1031,53 @@ const App = (() => {
   // ─────────────────────────────────────────
   //  SCHEDULE SESSION (feature Q)
   // ─────────────────────────────────────────
+  function populateScheduleStudentSelect(preselectedId = '') {
+    const select = document.getElementById('sched-student-select');
+    if (!select) return;
+
+    const sorted = [...allStudents].sort((a, b) => (a?.full_name || '').localeCompare(b?.full_name || '', 'fr'));
+    select.innerHTML = '<option value="">Choisir un élève</option>' + sorted
+      .map((s) => `<option value="${s.id}">${escapeHtml(s.full_name || 'Élève')}</option>`)
+      .join('');
+
+    if (preselectedId) {
+      select.value = preselectedId;
+    }
+  }
+
   function openScheduleModal(studentId, studentName) {
+    populateScheduleStudentSelect(studentId || '');
     document.getElementById('sched-student-id').value = studentId;
-    document.getElementById('sched-student-name').textContent = 'Élève : ' + studentName;
-    document.getElementById('schedule-error').hidden = true;
+    document.getElementById('sched-student-name').textContent = studentId
+      ? 'Élève : ' + studentName
+      : 'Choisissez un élève puis la date/heure.';
+    const errEl = document.getElementById('schedule-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
     document.getElementById('schedule-form').reset();
     document.getElementById('sched-student-id').value = studentId;
+    if (studentId) {
+      const select = document.getElementById('sched-student-select');
+      if (select) select.value = studentId;
+    }
     openModal('modal-schedule');
   }
 
   async function submitScheduleSession() {
     const btn       = document.getElementById('btn-schedule-submit');
     const errEl     = document.getElementById('schedule-error');
-    const studentId = document.getElementById('sched-student-id').value;
+    const selectedStudentId = document.getElementById('sched-student-select')?.value || '';
+    const studentId = selectedStudentId || document.getElementById('sched-student-id').value;
     const date      = document.getElementById('sched-date').value;
     const time      = document.getElementById('sched-time').value;
     const subject   = document.getElementById('sched-subject').value.trim();
     const notes     = document.getElementById('sched-notes').value.trim();
+
+    if (!studentId) {
+      errEl.textContent = 'Choisissez un élève.';
+      errEl.hidden = false;
+      return;
+    }
 
     if (!date || !time) {
       errEl.textContent = 'Date et heure requises.';
@@ -1060,24 +1088,33 @@ const App = (() => {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
 
-    const scheduled_at = new Date(date + 'T' + time).toISOString();
-    const { error } = await supabase.from('scheduled_sessions').insert({
-      teacher_id:   profile.id,
-      student_id:   studentId,
-      scheduled_at,
-      subject:      subject || null,
-      notes:        notes   || null,
-    });
+    try {
+      const scheduled_at = new Date(date + 'T' + time).toISOString();
+      const { error } = await supabase.from('scheduled_sessions').insert({
+        teacher_id:   profile.id,
+        student_id:   studentId,
+        scheduled_at,
+        subject:      subject || null,
+        notes:        notes   || null,
+      });
 
-    btn.disabled = false;
-    btn.textContent = 'Planifier';
-    if (error) {
-      errEl.textContent = 'Erreur : ' + (error.message || 'Réessayez.');
+      btn.disabled = false;
+      btn.textContent = 'Planifier';
+      if (error) {
+        errEl.textContent = 'Erreur : ' + (error.message || 'Réessayez.');
+        errEl.hidden = false;
+        return;
+      }
+
+      closeAllModals();
+      showView('calendar');
+      renderCalendar();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Planifier';
+      errEl.textContent = 'Erreur : ' + (e?.message || 'réseau');
       errEl.hidden = false;
-      return;
     }
-    closeAllModals();
-    renderCalendar();
   }
 
   // ─────────────────────────────────────────
