@@ -103,23 +103,48 @@ const Auth = (() => {
     listenersBound = true;
   }
 
+  async function withTimeout(promise, timeoutMs, label) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`timeout:${label}`)), timeoutMs);
+      }),
+    ]);
+  }
+
+  async function safeSignOutAndShowLogin(message) {
+    if (message) pendingLoginError = message;
+    try {
+      await withTimeout(supabase.auth.signOut(), 3000, 'signout');
+    } catch (_e) {
+      // keep going even if signOut call hangs
+    }
+    showLogin();
+  }
+
   async function handleLogin(e) {
     e.preventDefault();
     loginError.hidden = true;
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="spinner"></span>';
 
+    // Absolute UI watchdog: never leave the login button spinning forever.
+    const uiWatchdog = setTimeout(() => {
+      if (loginView.classList.contains('active')) {
+        showError('Connexion bloquée. Recharge la page puis réessaie.');
+      }
+    }, 20000);
+
     const identifier = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     const email = resolveLoginEmail(identifier);
 
     try {
-      const timeoutMs = 15000;
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('timeout')), timeoutMs);
-      });
-      const signInPromise = supabase.auth.signInWithPassword({ email, password });
-      const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        15000,
+        'signin'
+      );
 
       if (error) {
         showLoginError(error);
@@ -128,18 +153,21 @@ const Auth = (() => {
 
       // Defensive path: some environments delay/skip auth state callback.
       if (data?.session) {
-        await handleSession(data.session);
+        await withTimeout(handleSession(data.session), 15000, 'handleSession');
         return;
       }
 
       showError('Connexion établie mais session introuvable. Réessaie.');
     } catch (e) {
-      if (String(e?.message || '').toLowerCase().includes('timeout')) {
+      const msg = String(e?.message || '').toLowerCase();
+      if (msg.includes('timeout')) {
         showError('Connexion trop longue. Vérifie internet puis réessaie.');
       } else {
-        showError('Erreur réseau. Vérifiez votre connexion internet.');
+        showError(`Erreur connexion: ${e?.message || 'réseau'}`);
       }
       return;
+    } finally {
+      clearTimeout(uiWatchdog);
     }
   }
 
@@ -187,16 +215,14 @@ const Auth = (() => {
         const msg = error?.code === 'PGRST116'
           ? 'Profil introuvable. Contactez Bilal.'
           : `Erreur profil (${error?.code || 'inconnue'}) : ${error?.message || ''}`;
-        pendingLoginError = msg;
-        await supabase.auth.signOut();
+        await safeSignOutAndShowLogin(msg);
         return;
       }
       profile = data;
       profile.role = normalizeRole(profile.role);
     } catch (e) {
       console.error('[BCW] étape 1 exception:', e);
-      pendingLoginError = `Étape 1 – ${e?.message || 'Erreur réseau'}`;
-      await supabase.auth.signOut();
+      await safeSignOutAndShowLogin(`Étape 1 – ${e?.message || 'Erreur réseau'}`);
       return;
     }
 
@@ -222,8 +248,7 @@ const Auth = (() => {
       showApp();
     } catch (e) {
       console.error('[BCW] étape 3 (showApp) exception:', e);
-      pendingLoginError = `Étape 3 – ${e?.message || 'Erreur affichage'}`;
-      await supabase.auth.signOut();
+      await safeSignOutAndShowLogin(`Étape 3 – ${e?.message || 'Erreur affichage'}`);
     }
   }
 
