@@ -422,9 +422,22 @@
         <input type="hidden" id="sched-student-id" />
         <div id="sched-student-name" class="modal-subtitle"></div>
         <div class="form-group">
+          <label for="sched-target-type">Planifier pour</label>
+          <select id="sched-target-type">
+            <option value="student">Un élève</option>
+            <option value="group">Un groupe</option>
+          </select>
+        </div>
+        <div class="form-group" id="sched-student-wrap">
           <label for="sched-student-select">Élève</label>
           <select id="sched-student-select">
             <option value="">Choisir un élève</option>
+          </select>
+        </div>
+        <div class="form-group" id="sched-group-wrap" hidden>
+          <label for="sched-group-select">Groupe</label>
+          <select id="sched-group-select">
+            <option value="">Choisir un groupe</option>
           </select>
         </div>
         <div class="form-group">
@@ -454,8 +467,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260404-6"></script>
-  <script src="js/auth.js?v=20260404-6"></script>
-  <script src="js/app.js?v=20260404-6"></script>
+  <script src="js/config.js?v=20260404-7"></script>
+  <script src="js/auth.js?v=20260404-7"></script>
+  <script src="js/app.js?v=20260404-7"></script>
 </body>
 </html>

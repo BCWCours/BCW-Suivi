@@ -9,6 +9,7 @@ const App = (() => {
   let editingReportId = null;
   let allReports = [];        // cache pour filtres
   let allStudents = [];       // cache liste élèves prof
+  let allGroups = [];         // cache groupes prof
   let allReportsFull = [];    // cache vue globale
   let calendarYear = new Date().getFullYear();
   let calendarMonth = new Date().getMonth();
@@ -215,11 +216,12 @@ const App = (() => {
     // Prof dashboard buttons
     document.getElementById('btn-add-student')?.addEventListener('click', () => openModal('modal-add-student'));
     document.getElementById('btn-schedule-session')?.addEventListener('click', () => {
-      openScheduleModal('', '');
+      openScheduleModal({});
     });
     document.getElementById('btn-schedule-session-2')?.addEventListener('click', () => {
-      openScheduleModal('', '');
+      openScheduleModal({});
     });
+    document.getElementById('sched-target-type')?.addEventListener('change', updateScheduleTargetFields);
 
     // Calendar nav
     document.getElementById('cal-prev')?.addEventListener('click', () => {
@@ -302,6 +304,18 @@ const App = (() => {
     if (error) return [];
     allStudents = (data || []).map((row) => row.students).filter(Boolean);
     return allStudents;
+  }
+
+  async function ensureTeacherGroupsLoaded() {
+    if (allGroups.length) return allGroups;
+    const { data, error } = await supabase
+      .from('groups')
+      .select('id, name')
+      .eq('teacher_id', profile.id)
+      .order('name', { ascending: true });
+    if (error) return [];
+    allGroups = data || [];
+    return allGroups;
   }
 
   async function loadProfDashboard() {
@@ -417,7 +431,7 @@ const App = (() => {
       myContainer.querySelectorAll('[data-action="schedule"]').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
-          openScheduleModal(btn.dataset.studentId, btn.dataset.studentName);
+          openScheduleModal({ studentId: btn.dataset.studentId, studentName: btn.dataset.studentName });
         });
       });
       myContainer.querySelectorAll('[data-action="unassign"]').forEach(btn => {
@@ -1144,21 +1158,56 @@ const App = (() => {
     }
   }
 
-  async function openScheduleModal(studentId, studentName) {
-    await ensureTeacherStudentsLoaded();
+  function populateScheduleGroupSelect(preselectedId = '') {
+    const select = document.getElementById('sched-group-select');
+    if (!select) return;
+
+    const sorted = [...allGroups].sort((a, b) => (a?.name || '').localeCompare(b?.name || '', 'fr'));
+    select.innerHTML = '<option value="">Choisir un groupe</option>' + sorted
+      .map((g) => `<option value="${g.id}">${escapeHtml(g.name || 'Groupe')}</option>`)
+      .join('');
+
+    if (preselectedId) {
+      select.value = preselectedId;
+    }
+  }
+
+  function updateScheduleTargetFields() {
+    const targetType = document.getElementById('sched-target-type')?.value || 'student';
+    const studentWrap = document.getElementById('sched-student-wrap');
+    const groupWrap = document.getElementById('sched-group-wrap');
+    if (studentWrap) studentWrap.hidden = targetType !== 'student';
+    if (groupWrap) groupWrap.hidden = targetType !== 'group';
+  }
+
+  async function openScheduleModal({ studentId = '', studentName = '', groupId = '' } = {}) {
+    await Promise.all([ensureTeacherStudentsLoaded(), ensureTeacherGroupsLoaded()]);
     populateScheduleStudentSelect(studentId || '');
-    document.getElementById('sched-student-id').value = studentId;
-    document.getElementById('sched-student-name').textContent = studentId
-      ? 'Élève : ' + studentName
-      : 'Choisissez un élève puis la date/heure.';
+    populateScheduleGroupSelect(groupId || '');
+
+    document.getElementById('sched-student-id').value = studentId || '';
+    document.getElementById('sched-student-name').textContent = groupId
+      ? 'Groupe présélectionné.'
+      : studentId
+        ? 'Élève : ' + studentName
+        : 'Choisissez un élève ou un groupe puis la date/heure.';
     const errEl = document.getElementById('schedule-error');
     errEl.hidden = true;
     errEl.textContent = '';
     document.getElementById('schedule-form').reset();
-    document.getElementById('sched-student-id').value = studentId;
+    const targetTypeSelect = document.getElementById('sched-target-type');
+    if (targetTypeSelect) {
+      targetTypeSelect.value = groupId ? 'group' : 'student';
+    }
+    updateScheduleTargetFields();
+    document.getElementById('sched-student-id').value = studentId || '';
     if (studentId) {
       const select = document.getElementById('sched-student-select');
       if (select) select.value = studentId;
+    }
+    if (groupId) {
+      const select = document.getElementById('sched-group-select');
+      if (select) select.value = groupId;
     }
     openModal('modal-schedule');
   }
@@ -1166,15 +1215,22 @@ const App = (() => {
   async function submitScheduleSession() {
     const btn       = document.getElementById('btn-schedule-submit');
     const errEl     = document.getElementById('schedule-error');
+    const targetType = document.getElementById('sched-target-type')?.value || 'student';
     const selectedStudentId = document.getElementById('sched-student-select')?.value || '';
+    const selectedGroupId = document.getElementById('sched-group-select')?.value || '';
     const studentId = selectedStudentId || document.getElementById('sched-student-id').value;
     const date      = document.getElementById('sched-date').value;
     const time      = document.getElementById('sched-time').value;
     const subject   = document.getElementById('sched-subject').value.trim();
     const notes     = document.getElementById('sched-notes').value.trim();
 
-    if (!studentId) {
+    if (targetType === 'student' && !studentId) {
       errEl.textContent = 'Choisissez un élève.';
+      errEl.hidden = false;
+      return;
+    }
+    if (targetType === 'group' && !selectedGroupId) {
+      errEl.textContent = 'Choisissez un groupe.';
       errEl.hidden = false;
       return;
     }
@@ -1192,7 +1248,8 @@ const App = (() => {
       const scheduled_at = new Date(date + 'T' + time).toISOString();
       const { error } = await supabase.from('scheduled_sessions').insert({
         teacher_id:   profile.id,
-        student_id:   studentId,
+        student_id:   targetType === 'student' ? studentId : null,
+        group_id:     targetType === 'group' ? selectedGroupId : null,
         scheduled_at,
         subject:      subject || null,
         notes:        notes   || null,
@@ -1240,7 +1297,7 @@ const App = (() => {
 
     const { data, error } = await supabase
       .from('scheduled_sessions')
-      .select('id, scheduled_at, subject, notes, student_id, students(full_name)')
+      .select('id, scheduled_at, subject, notes, student_id, group_id, students(full_name), groups(name)')
       .eq('teacher_id', profile.id)
       .order('scheduled_at', { ascending: false });
 
@@ -1276,16 +1333,19 @@ const App = (() => {
       const dt = new Date(s.scheduled_at);
       const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
       const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+      const targetLabel = s.group_id
+        ? `Groupe: ${((s.groups && s.groups.name) || 'Groupe')}`
+        : ((s.students && s.students.full_name) || 'Élève');
       return `
         <article class="session-item">
           <div>
             <h3>${escapeHtml(s.subject || 'Séance')}</h3>
-            <p class="session-meta">${escapeHtml((s.students && s.students.full_name) || 'Élève')} · ${date} · ${time}</p>
+            <p class="session-meta">${escapeHtml(targetLabel)} · ${date} · ${time}</p>
             ${s.notes ? `<p class="session-notes">${escapeHtml(s.notes)}</p>` : ''}
           </div>
           <div class="session-actions">
             <button class="btn btn-sm btn-outline" data-action="open-day" data-date="${s.scheduled_at.split('T')[0]}">Voir agenda</button>
-            <button class="btn btn-sm btn-outline" data-action="delete-session" data-session-id="${s.id}" data-session-label="${escapeHtml((s.students && s.students.full_name) || 'séance')}">Supprimer</button>
+            <button class="btn btn-sm btn-outline" data-action="delete-session" data-session-id="${s.id}" data-session-label="${escapeHtml(targetLabel)}">Supprimer</button>
             ${isPast ? '<span class="teacher-chip">Passée</span>' : ''}
           </div>
         </article>
@@ -1366,7 +1426,7 @@ const App = (() => {
         .gte('session_date', start)
         .lte('session_date', end),
       supabase.from('scheduled_sessions')
-        .select('scheduled_at, subject, student_id, students(full_name)')
+        .select('scheduled_at, subject, student_id, group_id, students(full_name), groups(name)')
         .eq('teacher_id', profile.id)
         .gte('scheduled_at', monthStartIsoFor(calendarYear, calendarMonth))
         .lt('scheduled_at', nextMonthStartIsoFor(calendarYear, calendarMonth)),
@@ -1390,7 +1450,11 @@ const App = (() => {
       const key = s.scheduled_at.split('T')[0];
       if (!calendarEvents[key]) calendarEvents[key] = [];
       const time = new Date(s.scheduled_at).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
-      calendarEvents[key].push({ type: 'session', label: (s.subject || 'Séance') + ' ' + time, student: s.students?.full_name });
+      calendarEvents[key].push({
+        type: 'session',
+        label: (s.subject || 'Séance') + ' ' + time,
+        student: s.group_id ? `Groupe: ${s.groups?.name || 'Groupe'}` : s.students?.full_name,
+      });
     });
 
     // Build grid
@@ -1480,6 +1544,7 @@ const App = (() => {
     }
 
     const groups = data || [];
+    allGroups = groups.map((g) => ({ id: g.id, name: g.name })).filter((g) => g.id);
     if (!groups.length) {
       listEl.innerHTML = '';
       emptyEl.hidden = false;
@@ -1580,6 +1645,7 @@ const App = (() => {
     }
 
     document.getElementById('group-create-form').reset();
+    allGroups = [];
     await loadGroupsView();
   }
 
@@ -1638,6 +1704,7 @@ const App = (() => {
       return;
     }
 
+    allGroups = [];
     await loadGroupsView();
   }
 
