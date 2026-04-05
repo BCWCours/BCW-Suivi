@@ -487,6 +487,18 @@ body {
   box-shadow: var(--shadow);
   padding: 16px 18px;
 }
+.group-card.owner-bilal {
+  background: #eef5ff;
+  border: 1px solid #c7ddff;
+}
+.group-card.owner-sami {
+  background: #edfdf2;
+  border: 1px solid #b7efc9;
+}
+.group-card.owner-none {
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
 .group-card-head {
   display: flex;
   justify-content: space-between;

@@ -2042,8 +2042,7 @@ const App = (() => {
 
     const { data, error } = await supabase
       .from('groups')
-      .select('*, group_students(student_id, students(id, full_name))')
-      .eq('teacher_id', profile.id)
+      .select('id, name, level, subject, teacher_id, created_at, profiles:teacher_id(full_name), group_students(student_id, students(id, full_name))')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -2054,7 +2053,8 @@ const App = (() => {
     }
 
     const groups = data || [];
-    allGroups = groups.map((g) => ({ id: g.id, name: g.name })).filter((g) => g.id);
+    const myGroups = groups.filter((g) => g.teacher_id === profile.id);
+    allGroups = myGroups.map((g) => ({ id: g.id, name: g.name })).filter((g) => g.id);
     if (!groups.length) {
       listEl.innerHTML = '';
       emptyEl.hidden = false;
@@ -2067,31 +2067,46 @@ const App = (() => {
         .filter(Boolean);
       const memberIds = new Set(members.map((m) => m.id));
       const available = allStudents.filter((s) => !memberIds.has(s.id));
+      const teacherName = g.profiles?.full_name || 'Prof BCW';
+      const loweredTeacher = String(teacherName || '').toLowerCase();
+      const ownerClass = loweredTeacher.includes('bilal')
+        ? 'owner-bilal'
+        : loweredTeacher.includes('sami')
+          ? 'owner-sami'
+          : 'owner-none';
+      const isMine = g.teacher_id === profile.id;
 
       return `
-        <article class="group-card">
+        <article class="group-card ${ownerClass}">
           <div class="group-card-head">
             <h3>${escapeHtml(g.name || 'Groupe')}</h3>
-            <button class="btn btn-sm btn-outline" data-action="delete-group" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name || 'Groupe')}">Supprimer</button>
+            ${isMine
+              ? `<button class="btn btn-sm btn-outline" data-action="delete-group" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name || 'Groupe')}">Supprimer</button>`
+              : '<span class="teacher-chip">Lecture seule</span>'}
           </div>
           <p class="group-meta">${escapeHtml((g.level || 'Niveau libre'))}${g.subject ? ` · ${escapeHtml(g.subject)}` : ''}</p>
+          <span class="teacher-chip">Prof: ${escapeHtml(teacherName)}</span>
           <div class="group-members">
             ${members.length
               ? members.map((m) => `
                 <div class="group-member-row">
                   <span>${escapeHtml(m.full_name || 'Élève')}</span>
-                  <button class="btn btn-sm btn-outline" data-action="remove-group-student" data-group-id="${g.id}" data-student-id="${m.id}">Retirer</button>
+                  ${isMine
+                    ? `<button class="btn btn-sm btn-outline" data-action="remove-group-student" data-group-id="${g.id}" data-student-id="${m.id}">Retirer</button>`
+                    : ''}
                 </div>
               `).join('')
               : 'Aucun élève dans ce groupe.'}
           </div>
-          <div class="group-actions">
-            <select data-group-student-select="${g.id}">
-              <option value="">Ajouter un élève</option>
-              ${available.map((s) => `<option value="${s.id}">${escapeHtml(s.full_name || 'Élève')}</option>`).join('')}
-            </select>
-            <button class="btn btn-sm btn-outline" data-action="add-group-student" data-group-id="${g.id}">Ajouter</button>
-          </div>
+          ${isMine
+            ? `<div class="group-actions">
+                <select data-group-student-select="${g.id}">
+                  <option value="">Ajouter un élève</option>
+                  ${available.map((s) => `<option value="${s.id}">${escapeHtml(s.full_name || 'Élève')}</option>`).join('')}
+                </select>
+                <button class="btn btn-sm btn-outline" data-action="add-group-student" data-group-id="${g.id}">Ajouter</button>
+              </div>`
+            : ''}
         </article>
       `;
     }).join('');
