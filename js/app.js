@@ -38,6 +38,41 @@ const App = (() => {
     return role === 'prof' || role === 'admin';
   }
 
+  function normalizePhoneForLookup(raw) {
+    const str = String(raw || '').trim();
+    if (!str) return '';
+    const compact = str.replace(/[\s().-]/g, '');
+    if (!compact) return '';
+    if (compact.startsWith('+')) return compact;
+    if (compact.startsWith('00')) return `+${compact.slice(2)}`;
+    if (compact.startsWith('32')) return `+${compact}`;
+    if (compact.startsWith('0')) return `+32${compact.slice(1)}`;
+    return compact;
+  }
+
+  function normalizeNameForLookup(raw) {
+    return String(raw || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  async function withTimeoutFallback(promise, ms, fallbackValue, label = 'timeout') {
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
+        }),
+      ]);
+    } catch (error) {
+      console.warn(`[BCW] ${label} failed:`, error);
+      return fallbackValue;
+    }
+  }
+
   const views = {
     profDashboard: document.getElementById('view-prof-dashboard'),
     reportEditor:  document.getElementById('view-report-editor'),
@@ -884,41 +919,165 @@ const App = (() => {
   //  ÉLÈVE: Accueil + Séances
   // ─────────────────────────────────────────
   async function getVisibleStudentSessions() {
-    const { data, error } = await supabase
-      .from('scheduled_sessions')
-      .select('id, scheduled_at, subject, notes, student_id, group_id, groups(name), profiles:teacher_id(full_name)')
-      .order('scheduled_at', { ascending: false });
-    return { data: data || [], error };
+    const res = await withTimeoutFallback(
+      supabase
+        .from('scheduled_sessions')
+        .select('id, scheduled_at, subject, notes, student_id, group_id, groups(name), profiles:teacher_id(full_name)')
+        .order('scheduled_at', { ascending: false }),
+      5000,
+      { data: [], error: { message: 'Délai dépassé pour charger les séances.' } },
+      'getVisibleStudentSessions'
+    );
+    return { data: res?.data || [], error: res?.error || null };
+  }
+
+  function tryAutoLinkStudentProfile() {
+    if (getRole() !== 'eleve') return;
+    withTimeoutFallback(
+      supabase.rpc('link_student_profile'),
+      5000,
+      null,
+      'link_student_profile'
+    );
+  }
+
+  async function getCurrentStudentRecord() {
+    tryAutoLinkStudentProfile();
+
+    const res = await withTimeoutFallback(
+      supabase
+        .from('students')
+        .select('id, full_name')
+        .eq('profile_id', profile.id)
+        .maybeSingle(),
+      5000,
+      { data: null, error: { message: 'Délai dépassé pour charger la fiche élève.' } },
+      'getCurrentStudentRecord'
+    );
+    const data = res?.data || null;
+    const error = res?.error || null;
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('[BCW] getCurrentStudentRecord primary query failed:', error);
+    }
+    if (data?.id) return data;
+
+    const phone = normalizePhoneForLookup(profile?.phone || '');
+    const name = normalizeNameForLookup(profile?.full_name || '');
+    console.warn('[BCW] student profile not linked', { phone, name });
+    return null;
   }
 
   async function getStudentTeacherContacts() {
-    const { data: myStudent } = await supabase
-      .from('students')
-      .select('id')
-      .eq('profile_id', profile.id)
-      .maybeSingle();
-
-    if (!myStudent?.id) return [];
-
-    const { data, error } = await supabase
-      .from('teacher_students')
-      .select('teacher_id, profiles:teacher_id(id, full_name)')
-      .eq('student_id', myStudent.id);
-    if (error) return [];
-
+    const myStudent = await getCurrentStudentRecord();
     const map = new Map();
-    (data || []).forEach((row) => {
-      const id = row.teacher_id || row.profiles?.id;
-      const name = row.profiles?.full_name || 'Prof BCW';
-      if (id && !map.has(id)) map.set(id, { id, name, studentId: myStudent.id });
-    });
+
+    const pushContact = (id, name, studentId) => {
+      if (!id) return;
+      if (map.has(id)) return;
+      map.set(id, {
+        id,
+        name: name || 'Prof BCW',
+        studentId: studentId || null,
+        studentName: myStudent?.full_name || profile.full_name || 'Élève',
+      });
+    };
+
+    if (myStudent?.id) {
+      const tsRes = await withTimeoutFallback(
+        supabase
+          .from('teacher_students')
+          .select('teacher_id, profiles:teacher_id(id, full_name)')
+          .eq('student_id', myStudent.id),
+        5000,
+        { data: [], error: { message: 'Délai dépassé pour charger les profs.' } },
+        'getStudentTeacherContacts.teacherStudents'
+      );
+      const data = tsRes?.data || [];
+      const error = tsRes?.error || null;
+
+      if (error) {
+        console.warn('[BCW] getStudentTeacherContacts teacher_students failed:', error);
+      } else {
+        (data || []).forEach((row) => {
+          pushContact(
+            row.teacher_id || row.profiles?.id,
+            row.profiles?.full_name || 'Prof BCW',
+            myStudent.id
+          );
+        });
+      }
+    }
+
+    // Fallback: if teacher_students is blocked by RLS, recover contacts from visible sessions/reports.
+    if (!map.size) {
+      const [sessionsRes, reportsRes] = await Promise.all([
+        withTimeoutFallback(
+          supabase
+            .from('scheduled_sessions')
+            .select('teacher_id, profiles:teacher_id(id, full_name)')
+            .order('scheduled_at', { ascending: false })
+            .limit(20),
+          5000,
+          { data: [], error: { message: 'Délai dépassé pour les séances (fallback prof).' } },
+          'getStudentTeacherContacts.fallbackSessions'
+        ),
+        withTimeoutFallback(
+          supabase
+            .from('session_reports')
+            .select('teacher_id, profiles:teacher_id(id, full_name)')
+            .not('published_at', 'is', null)
+            .order('session_date', { ascending: false })
+            .limit(20),
+          5000,
+          { data: [], error: { message: 'Délai dépassé pour les rapports (fallback prof).' } },
+          'getStudentTeacherContacts.fallbackReports'
+        ),
+      ]);
+
+      if (!sessionsRes.error) {
+        (sessionsRes.data || []).forEach((row) => {
+          pushContact(
+            row.teacher_id || row.profiles?.id,
+            row.profiles?.full_name || 'Prof BCW',
+            myStudent?.id || null
+          );
+        });
+      }
+      if (!reportsRes.error) {
+        (reportsRes.data || []).forEach((row) => {
+          pushContact(
+            row.teacher_id || row.profiles?.id,
+            row.profiles?.full_name || 'Prof BCW',
+            myStudent?.id || null
+          );
+        });
+      }
+    }
+
     return [...map.values()];
+  }
+
+  function showNoTeacherAssignedMessage() {
+    const msg = 'Aucun prof trouvé pour ton compte. Demande à Bilal/Sami de relier ton compte élève.';
+    const teacherEl = document.getElementById('student-home-teacher');
+    if (teacherEl) {
+      teacherEl.innerHTML = `<span class="form-error">${escapeHtml(msg)}</span>`;
+    }
+    const subtitleEl = document.getElementById('feed-subtitle');
+    if (subtitleEl && getRole() === 'eleve') {
+      subtitleEl.textContent = msg;
+    }
+    window.alert(msg);
   }
 
   async function openQuestionToTeacher(prefillText) {
     if (getRole() !== 'eleve') return;
     const contacts = await getStudentTeacherContacts();
-    if (!contacts.length) return;
+    if (!contacts.length) {
+      showNoTeacherAssignedMessage();
+      return;
+    }
     const contact = contacts[0];
 
     showView('messages');
@@ -943,60 +1102,78 @@ const App = (() => {
     prepEl.textContent = 'Chargement...';
     reportEl.textContent = 'Chargement...';
 
-    const now = new Date();
-    const [sessionsRes, reportRes, teachers] = await Promise.all([
-      getVisibleStudentSessions(),
-      supabase
-        .from('session_reports')
-        .select('id, session_date, subjects_covered, score, profiles:teacher_id(full_name)')
-        .not('published_at', 'is', null)
-        .order('session_date', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      getStudentTeacherContacts(),
-    ]);
+    try {
+      const now = new Date();
+      const [sessionsRes, reportRes, teachers] = await Promise.all([
+        getVisibleStudentSessions(),
+        withTimeoutFallback(
+          supabase
+            .from('session_reports')
+            .select('id, session_date, subjects_covered, score, profiles:teacher_id(full_name)')
+            .not('published_at', 'is', null)
+            .order('session_date', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          5000,
+          { data: null, error: { message: 'Délai dépassé pour charger le rapport.' } },
+          'loadStudentHome.lastReport'
+        ),
+        withTimeoutFallback(
+          getStudentTeacherContacts(),
+          5000,
+          [],
+          'loadStudentHome.teachers'
+        ),
+      ]);
 
-    if (!teachers.length) {
-      teacherEl.textContent = 'Aucun prof assigné pour le moment.';
-    } else {
-      teacherEl.innerHTML = teachers
-        .map((t) => `<span class="teacher-chip">Prof: ${escapeHtml(t.name)}</span>`)
-        .join(' ');
-    }
-
-    if (sessionsRes.error) {
-      nextEl.textContent = 'Impossible de charger la prochaine séance.';
-      prepEl.textContent = 'Impossible de charger la préparation.';
-    } else {
-      const sessions = sessionsRes.data || [];
-      const upcoming = sessions
-        .filter((s) => new Date(s.scheduled_at) >= now)
-        .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
-      const next = upcoming[0];
-
-      if (next) {
-        const dt = new Date(next.scheduled_at);
-        const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
-        const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
-        const target = next.group_id ? `Groupe ${next.groups?.name || ''}` : 'Cours individuel';
-        nextEl.innerHTML = `<strong>${date}</strong><br>${time}${next.subject ? ` · ${escapeHtml(next.subject)}` : ''}<br>${escapeHtml(target.trim())}`;
-        prepEl.textContent = next.notes?.trim() || 'Aucune préparation demandée pour le moment.';
+      if (!teachers.length) {
+        teacherEl.textContent = 'Aucun prof assigné (ou compte non lié).';
       } else {
-        nextEl.textContent = 'Aucune séance à venir.';
-        prepEl.textContent = 'Pas de préparation en attente.';
+        teacherEl.innerHTML = teachers
+          .map((t) => `<span class="teacher-chip">Prof: ${escapeHtml(t.name)}</span>`)
+          .join(' ');
       }
-    }
 
-    if (reportRes.error) {
-      reportEl.textContent = 'Impossible de charger le dernier rapport.';
-    } else if (!reportRes.data) {
-      reportEl.textContent = 'Aucun rapport publié pour le moment.';
-    } else {
-      const r = reportRes.data;
-      const d = new Date(r.session_date + 'T00:00:00');
-      const date = d.toLocaleDateString('fr-BE', { day: 'numeric', month: 'long' });
-      const score = r.score ? ` · ${r.score}/5` : '';
-      reportEl.innerHTML = `<strong>${escapeHtml(r.subjects_covered || 'Rapport')}</strong><br>${date}${score}<br>${escapeHtml(r.profiles?.full_name || '')}`;
+      if (sessionsRes.error) {
+        nextEl.textContent = 'Impossible de charger la prochaine séance.';
+        prepEl.textContent = 'Impossible de charger la préparation.';
+      } else {
+        const sessions = sessionsRes.data || [];
+        const upcoming = sessions
+          .filter((s) => new Date(s.scheduled_at) >= now)
+          .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+        const next = upcoming[0];
+
+        if (next) {
+          const dt = new Date(next.scheduled_at);
+          const date = dt.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
+          const time = dt.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' });
+          const target = next.group_id ? `Groupe ${next.groups?.name || ''}` : 'Cours individuel';
+          nextEl.innerHTML = `<strong>${date}</strong><br>${time}${next.subject ? ` · ${escapeHtml(next.subject)}` : ''}<br>${escapeHtml(target.trim())}`;
+          prepEl.textContent = next.notes?.trim() || 'Aucune préparation demandée pour le moment.';
+        } else {
+          nextEl.textContent = 'Aucune séance à venir.';
+          prepEl.textContent = 'Pas de préparation en attente.';
+        }
+      }
+
+      if (reportRes.error) {
+        reportEl.textContent = 'Impossible de charger le dernier rapport.';
+      } else if (!reportRes.data) {
+        reportEl.textContent = 'Aucun rapport publié pour le moment.';
+      } else {
+        const r = reportRes.data;
+        const d = new Date(r.session_date + 'T00:00:00');
+        const date = d.toLocaleDateString('fr-BE', { day: 'numeric', month: 'long' });
+        const score = r.score ? ` · ${r.score}/5` : '';
+        reportEl.innerHTML = `<strong>${escapeHtml(r.subjects_covered || 'Rapport')}</strong><br>${date}${score}<br>${escapeHtml(r.profiles?.full_name || '')}`;
+      }
+    } catch (error) {
+      console.error('[BCW] loadStudentHome failed:', error);
+      teacherEl.textContent = 'Erreur chargement prof.';
+      nextEl.textContent = 'Erreur chargement séance.';
+      prepEl.textContent = 'Erreur chargement préparation.';
+      reportEl.textContent = 'Erreur chargement rapport.';
     }
   }
 
@@ -1015,7 +1192,12 @@ const App = (() => {
     errEl.hidden = true;
     errEl.textContent = '';
 
-    const { data, error } = await getVisibleStudentSessions();
+    const { data, error } = await withTimeoutFallback(
+      getVisibleStudentSessions(),
+      5000,
+      { data: [], error: { message: 'Délai dépassé pour charger les séances.' } },
+      'loadStudentSessions'
+    );
     if (error) {
       upcomingEl.innerHTML = '';
       pastEl.innerHTML = '';
@@ -1089,12 +1271,16 @@ const App = (() => {
     container.innerHTML = '<div class="loading-center"><span class="spinner"></span></div>';
     empty.hidden = true;
 
-    const { data: student } = await supabase
-      .from('students').select('id').eq('profile_id', profile.id).single();
+    const student = await withTimeoutFallback(
+      getCurrentStudentRecord(),
+      5000,
+      null,
+      'loadStudentFeed.student'
+    );
 
     if (!student) {
-      container.innerHTML = '';
-      empty.hidden = false;
+      container.innerHTML = '<p class="form-error">Compte élève non lié. Demande à Bilal/Sami de relier ton compte.</p>';
+      empty.hidden = true;
       return;
     }
     currentFeedStudentId = student.id;
@@ -1102,12 +1288,19 @@ const App = (() => {
     // Prochaine séance
     loadNextSession();
 
-    const { data: reports, error } = await supabase
-      .from('session_reports')
-      .select('*, profiles!session_reports_teacher_id_fkey(full_name)')
-      .eq('student_id', student.id)
-      .not('published_at', 'is', null)
-      .order('session_date', { ascending: false });
+    const reportsRes = await withTimeoutFallback(
+      supabase
+        .from('session_reports')
+        .select('*, profiles!session_reports_teacher_id_fkey(full_name)')
+        .eq('student_id', student.id)
+        .not('published_at', 'is', null)
+        .order('session_date', { ascending: false }),
+      5000,
+      { data: [], error: { message: 'Délai dépassé pour charger les rapports.' } },
+      'loadStudentFeed.reports'
+    );
+    const reports = reportsRes?.data || [];
+    const error = reportsRes?.error || null;
 
     allReports = reports || [];
     buildMonthFilter('filter-month', allReports);
@@ -2077,18 +2270,15 @@ const App = (() => {
       });
     } else if (profile.role === 'eleve') {
       // My teacher(s)
-      const { data: myStudent } = await supabase.from('students').select('id').eq('profile_id', profile.id).single();
-      if (myStudent) {
-        const { data: teachers } = await supabase
-          .from('teacher_students')
-          .select('teacher_id, profiles:teacher_id(id, full_name)')
-          .eq('student_id', myStudent.id);
-        (teachers || []).forEach(t => {
-          const id = t.teacher_id || t.profiles?.id;
-          const name = t.profiles?.full_name || 'Prof BCW';
-          if (id) contacts.push({ id, name, studentId: myStudent.id, studentName: profile.full_name });
+      const teacherContacts = await getStudentTeacherContacts();
+      teacherContacts.forEach((t) => {
+        contacts.push({
+          id: t.id,
+          name: t.name || 'Prof BCW',
+          studentId: t.studentId || null,
+          studentName: t.studentName || profile.full_name,
         });
-      }
+      });
     } else if (profile.role === 'parent') {
       // My children's teachers
       const { data: links } = await supabase
@@ -2101,6 +2291,14 @@ const App = (() => {
         });
       });
     }
+
+    const deduped = new Map();
+    contacts.forEach((c) => {
+      const key = `${c.id || ''}::${c.studentId || ''}`;
+      if (!c.id || deduped.has(key)) return;
+      deduped.set(key, c);
+    });
+    contacts = [...deduped.values()];
 
     if (contacts.length === 0) {
       convList.innerHTML = '<div class="empty-state"><div class="empty-icon">💬</div><p>Aucune conversation disponible.</p></div>';
